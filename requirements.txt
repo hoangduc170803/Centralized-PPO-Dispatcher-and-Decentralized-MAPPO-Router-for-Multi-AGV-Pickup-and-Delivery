@@ -1,0 +1,15 @@
+numpy>=1.24
+networkx>=3.0
+scipy>=1.10
+matplotlib>=3.7
+pettingzoo>=1.24
+torch>=2.0
+tqdm>=4.65
+pyyaml>=6.0
+
+# Optional external baseline/backend packages
+# cbs-mapf>=0.5
+
+# Optional, install later for Sprint 4+
+# torch-geometric>=2.5
+# wandb>=0.16

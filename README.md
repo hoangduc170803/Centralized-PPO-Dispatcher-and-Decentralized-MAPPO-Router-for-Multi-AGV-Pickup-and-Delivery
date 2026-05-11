@@ -1,0 +1,58 @@
+# IPPO MAPF / MAPD Warehouse Simulator
+
+Python tooling for parsing an OpenTCS warehouse map, running graph routing/MAPF
+baselines, visualizing topology, and logging MAPD rollout metrics.
+
+## Setup
+
+Install the core dependencies:
+
+```powershell
+pip install -r requirements.txt
+```
+
+The external `cbs-mapf` backend is optional because the adapter validates every
+returned path against the directed OpenTCS graph and falls back to graph-native
+prioritized space-time A* when the grid backend is unavailable or invalid.
+Install it when working on Sprint 2 CBS baseline smoke tests:
+
+```powershell
+pip install cbs-mapf
+```
+
+## Verification
+
+Run the test suite from the repo root:
+
+```powershell
+python -m unittest discover -s src
+```
+
+With `cbs-mapf` installed, the suite should include the external backend smoke
+test. Without it, that single smoke test is skipped.
+
+## MAPF Benchmark Logging
+
+For one-shot MAPF/CBS baselines, pass the planner makespan into the rollout
+logger so the CSV/JSON metrics do not confuse lifelong MAPD completion time
+with one-shot MAPF makespan:
+
+```python
+metrics = logger.finalize(instance_makespan=plan_result.makespan)
+```
+
+`last_completion_step` is for streamed MAPD episodes. `instance_makespan` is for
+one-shot MAPF instances.
+
+## Repository Layout
+
+Commit the core project files:
+
+- `src/` - parser, routing, PettingZoo env, MAPF adapter, logging, visualization
+- `orca_share_media1778260607027_7458565577098821053.xml` - OpenTCS map sample
+- `results/map/` - curated topology visualization artifacts
+- `requirements.txt`, `PLAN.md`, `README.md`
+
+The local `cleanrl/` and `opentcs-integration-example/` folders are ignored as
+third-party checkouts. Keep them as separate upstream repos, forks, or submodules
+if they become part of the final thesis artifact.

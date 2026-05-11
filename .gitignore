@@ -1,0 +1,69 @@
+# Python cache/build artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
+
+# Virtual environments
+/.venv/
+/venv/
+/env/
+/ENV/
+cleanrl/.venv/
+
+# Notebooks / local exploration
+.ipynb_checkpoints/
+
+# Logs, experiment outputs, checkpoints
+logs/
+runs/
+wandb/
+checkpoints/
+*.log
+*.pt
+*.pth
+*.ckpt
+*.onnx
+
+# Generated results: keep curated map artifacts only
+results/*
+!results/map/
+!results/map/topology_report.json
+!results/map/warehouse_full.png
+!results/map/warehouse_largest_scc.png
+
+# Third-party checkouts kept locally for reference.
+# Use README links/submodules instead of vendoring these into the main repo.
+cleanrl/
+opentcs-integration-example/
+
+# Java / Gradle / Maven build artifacts
+**/target/
+**/.gradle/
+**/build/
+**/.idea/
+**/.vscode/
+*.class
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*.swo
+
+# Local secrets/config
+.env
+.env.*
+*.pem
+*.key
+
+# Local planning notes
+PLAN.md
