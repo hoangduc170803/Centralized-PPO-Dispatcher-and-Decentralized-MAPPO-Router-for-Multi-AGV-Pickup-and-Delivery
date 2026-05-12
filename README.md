@@ -33,6 +33,15 @@ test. Without it, that single smoke test is skipped.
 
 ## MAPF Benchmark Logging
 
+Run the Sprint 2 classical baselines and write a CSV:
+
+```powershell
+python -m src.baselines.benchmark --agents 10 15 20 --seeds 0 1 2 3 4
+```
+
+Use `--no-external` when you want deterministic graph-native fallback only,
+without attempting the optional `cbs-mapf` grid backend.
+
 For one-shot MAPF/CBS baselines, pass the planner makespan into the rollout
 logger so the CSV/JSON metrics do not confuse lifelong MAPD completion time
 with one-shot MAPF makespan:
@@ -51,8 +60,9 @@ Commit the core project files:
 - `src/` - parser, routing, PettingZoo env, MAPF adapter, logging, visualization
 - `orca_share_media1778260607027_7458565577098821053.xml` - OpenTCS map sample
 - `results/map/` - curated topology visualization artifacts
-- `requirements.txt`, `PLAN.md`, `README.md`
+- `requirements.txt`, `README.md`
 
 The local `cleanrl/` and `opentcs-integration-example/` folders are ignored as
 third-party checkouts. Keep them as separate upstream repos, forks, or submodules
 if they become part of the final thesis artifact.
+`PLAN.md` and `CLAUDE.md` are ignored local planning notes.

@@ -7,12 +7,13 @@ from .cbs_solver import (
     PrioritizedGraphPlanner,
     validate_paths,
 )
+from .priority_search import PrioritySearchPlanner
 
 __all__ = [
     "CBSMapfPlanner",
     "MAPFPlanResult",
     "PathConflict",
+    "PrioritySearchPlanner",
     "PrioritizedGraphPlanner",
     "validate_paths",
 ]
-
