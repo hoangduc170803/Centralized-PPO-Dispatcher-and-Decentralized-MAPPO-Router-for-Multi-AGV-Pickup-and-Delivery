@@ -80,6 +80,27 @@ class TestPrioritizedGraphPlanner(unittest.TestCase):
         self.assertTrue(result.success, result)
         self.assertEqual(result.solver, "prioritized_graph_astar")
 
+    def test_reports_no_path_failure_subtype(self):
+        G = nx.DiGraph()
+        G.add_node("a", x=0.0, y=0.0, is_halt=False, type="POINT")
+        G.add_node("b", x=1.0, y=0.0, is_halt=False, type="POINT")
+        G.add_edge("a", "b", weight=1.0, length=1.0)
+        result = PrioritizedGraphPlanner(G, max_time=4).plan(
+            starts={"a0": "b"},
+            goals={"a0": "a"},
+        )
+        self.assertFalse(result.success)
+        self.assertEqual(result.diagnostics["failure_subtype"], "no_path")
+
+    def test_reports_prioritized_block_failure_subtype(self):
+        G = _grid_graph(1, 2)
+        result = PrioritizedGraphPlanner(G, max_time=4).plan(
+            starts={"a0": "0,0", "a1": "0,1"},
+            goals={"a0": "0,1", "a1": "0,0"},
+        )
+        self.assertFalse(result.success)
+        self.assertEqual(result.diagnostics["failure_subtype"], "prioritized_block")
+
     def test_coord_collisions_are_reported_in_diagnostics(self):
         G = nx.DiGraph()
         G.add_node("main", x=0.0, y=0.0, is_halt=False, type="POINT")

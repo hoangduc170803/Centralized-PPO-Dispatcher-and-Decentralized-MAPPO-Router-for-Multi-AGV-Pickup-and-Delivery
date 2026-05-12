@@ -61,6 +61,16 @@ Summarize a raw benchmark CSV into a compact markdown table:
 python -m src.baselines.aggregate results/baselines/sprint2_mapf_baselines.csv
 ```
 
+For the thesis table, `lower_bound_steps` is the MAPF-IS lower bound:
+`max_i single_agent_shortest_path_steps(start_i, goal_i)`. It is admissible,
+but it is not a CBS-optimal makespan. The retained `cbs-mapf` adapter is useful
+for smoke checks, while the warehouse benchmark defaults to graph-native
+prioritized planners for reproducibility on the directed topology.
+
+`priority_search` exits early on the first successful priority order, so wall
+time can vary sharply with agent count and seed. Treat its latency as a
+worst-case-budgeted method rather than assuming monotonic scaling.
+
 For one-shot MAPF/CBS baselines, pass the planner makespan into the rollout
 logger so the CSV/JSON metrics do not confuse lifelong MAPD completion time
 with one-shot MAPF makespan:

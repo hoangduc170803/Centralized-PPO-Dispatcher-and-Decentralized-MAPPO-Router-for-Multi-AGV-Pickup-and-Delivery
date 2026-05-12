@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import unittest
 
 from src.baselines.aggregate import aggregate_rows, render_markdown
@@ -38,6 +39,7 @@ class TestAggregate(unittest.TestCase):
         self.assertEqual(row["runs"], 2)
         self.assertAlmostEqual(row["success_rate"], 0.5)
         self.assertAlmostEqual(row["mean_makespan_success"], 50.0)
+        self.assertTrue(math.isnan(row["std_makespan_success"]))
         self.assertEqual(row["failure_reasons"], "timeout:1")
         self.assertIn("priority_search", render_markdown(summary))
 

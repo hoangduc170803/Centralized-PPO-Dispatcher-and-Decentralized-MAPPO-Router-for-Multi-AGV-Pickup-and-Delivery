@@ -151,7 +151,13 @@ class PrioritizedGraphPlanner:
                     paths=paths,
                     solver="prioritized_graph_astar",
                     elapsed_s=time.perf_counter() - start_time,
-                    diagnostics={"failed_agent": agent},
+                    diagnostics={
+                        "failed_agent": agent,
+                        "failure_subtype": self._failure_subtype(
+                            starts[agent],
+                            goals[agent],
+                        ),
+                    },
                 )
             paths[agent] = path
             self._reserve_path(path, vertex_reservations, edge_reservations)
@@ -225,6 +231,14 @@ class PrioritizedGraphPlanner:
                 heapq.heappush(frontier, (priority, counter, nxt, nt))
 
         return None
+
+    def _failure_subtype(self, start: str, goal: str) -> str:
+        if start not in self.G or goal not in self.G:
+            return "no_path"
+        heuristic = self._heuristic_to_goal(goal)
+        if start != goal and start not in heuristic:
+            return "no_path"
+        return "prioritized_block"
 
     def _transition_is_clear(
         self,

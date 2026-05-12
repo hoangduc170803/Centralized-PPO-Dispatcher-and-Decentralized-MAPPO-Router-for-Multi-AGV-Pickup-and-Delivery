@@ -7,7 +7,7 @@ import csv
 import math
 from collections import Counter, defaultdict
 from pathlib import Path
-from statistics import mean
+from statistics import mean, stdev
 from typing import Iterable, Sequence
 
 
@@ -33,8 +33,11 @@ def aggregate_rows(rows: Iterable[dict[str, str]]) -> list[dict[str, object]]:
                 "runs": len(items),
                 "success_rate": mean(1.0 if ok else 0.0 for ok in successes),
                 "mean_makespan_success": _mean_field(successful_rows, "instance_makespan"),
+                "std_makespan_success": _std_field(successful_rows, "instance_makespan"),
                 "mean_ratio_success": _mean_field(successful_rows, "makespan_over_lower_bound"),
+                "std_ratio_success": _std_field(successful_rows, "makespan_over_lower_bound"),
                 "mean_wait_success": _mean_field(successful_rows, "waiting_time_agent_steps"),
+                "std_wait_success": _std_field(successful_rows, "waiting_time_agent_steps"),
                 "mean_elapsed_s": _mean_field(items, "elapsed_s"),
                 "failure_reasons": ", ".join(
                     f"{reason}:{count}" for reason, count in sorted(failure_reasons.items())
@@ -52,8 +55,11 @@ def render_markdown(summary: Sequence[dict[str, object]]) -> str:
         "runs",
         "success",
         "mean_makespan",
+        "std_makespan",
         "mean_ratio",
+        "std_ratio",
         "mean_wait",
+        "std_wait",
         "mean_elapsed_s",
         "failure_reasons",
     ]
@@ -71,8 +77,11 @@ def render_markdown(summary: Sequence[dict[str, object]]) -> str:
                     str(row["runs"]),
                     _fmt_float(row["success_rate"]),
                     _fmt_float(row["mean_makespan_success"]),
+                    _fmt_float(row["std_makespan_success"]),
                     _fmt_float(row["mean_ratio_success"]),
+                    _fmt_float(row["std_ratio_success"]),
                     _fmt_float(row["mean_wait_success"]),
+                    _fmt_float(row["std_wait_success"]),
                     _fmt_float(row["mean_elapsed_s"], digits=4),
                     str(row["failure_reasons"]),
                 ]
@@ -88,7 +97,17 @@ def read_csv(path: Path | str) -> list[dict[str, str]]:
 
 
 def _mean_field(rows: Sequence[dict[str, str]], field: str) -> float:
-    values = []
+    values = _finite_field_values(rows, field)
+    return mean(values) if values else math.nan
+
+
+def _std_field(rows: Sequence[dict[str, str]], field: str) -> float:
+    values = _finite_field_values(rows, field)
+    return stdev(values) if len(values) >= 2 else math.nan
+
+
+def _finite_field_values(rows: Sequence[dict[str, str]], field: str) -> list[float]:
+    values: list[float] = []
     for row in rows:
         raw = row.get(field, "")
         try:
@@ -97,7 +116,7 @@ def _mean_field(rows: Sequence[dict[str, str]], field: str) -> float:
             continue
         if math.isfinite(value):
             values.append(value)
-    return mean(values) if values else math.nan
+    return values
 
 
 def _as_bool(raw: str) -> bool:

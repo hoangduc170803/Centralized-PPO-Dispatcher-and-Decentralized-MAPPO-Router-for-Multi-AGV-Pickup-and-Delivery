@@ -393,6 +393,9 @@ def _failure_reason(result: MAPFPlanResult) -> str:
     if result.success:
         return ""
     diagnostics = result.diagnostics
+    failure_subtype = diagnostics.get("failure_subtype")
+    if failure_subtype in {"prioritized_block", "no_path"}:
+        return str(failure_subtype)
     if diagnostics.get("timed_out"):
         return "timeout"
     if result.conflicts:
