@@ -38,6 +38,9 @@ results/*
 !results/map/topology_report.json
 !results/map/warehouse_full.png
 !results/map/warehouse_largest_scc.png
+!results/baselines/
+results/baselines/*
+!results/baselines/sprint2_mapf_baselines.csv
 
 # Third-party checkouts kept locally for reference.
 # Use README links/submodules instead of vendoring these into the main repo.
@@ -66,6 +69,4 @@ desktop.ini
 *.key
 
 # Local planning notes
-PLAN.md
-CLAUDE.md
-**/CLAUDE.md
+PLAN.md 

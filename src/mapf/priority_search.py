@@ -1,4 +1,4 @@
-"""PBS-style priority-order search baseline.
+"""Multi-order prioritized planning baseline.
 
 This is intentionally lightweight: it searches a bounded set of priority
 orders and delegates each order to the graph-native prioritized space-time A*

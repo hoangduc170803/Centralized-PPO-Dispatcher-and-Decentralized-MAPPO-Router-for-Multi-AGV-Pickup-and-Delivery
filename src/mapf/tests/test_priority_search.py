@@ -1,4 +1,4 @@
-"""Tests for the PBS-style priority-search MAPF baseline."""
+"""Tests for the multi-order priority-search MAPF baseline."""
 
 from __future__ import annotations
 

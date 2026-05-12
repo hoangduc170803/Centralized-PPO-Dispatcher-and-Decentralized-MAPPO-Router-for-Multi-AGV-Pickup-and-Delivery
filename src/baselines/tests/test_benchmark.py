@@ -9,12 +9,13 @@ from pathlib import Path
 import networkx as nx
 
 from src.baselines.benchmark import (
-    benchmark_row,
     run_benchmark,
     run_mapf_baseline,
     sample_mapf_instance,
+    benchmark_row,
     write_benchmark_csv,
 )
+from src.routing.astar import AStarRouter
 
 
 def _grid_graph(rows: int, cols: int) -> nx.DiGraph:
@@ -41,34 +42,48 @@ class TestBenchmarkRunner(unittest.TestCase):
         self.assertEqual(goals_a, goals_b)
         self.assertEqual(len(set(starts_a.values()) | set(goals_a.values())), 6)
 
-    def test_runs_pbs_and_hungarian_cbs_rows(self):
+    def test_runs_priority_search_and_hungarian_cbs_rows(self):
         G = _grid_graph(4, 4)
+        router = AStarRouter(G, precompute=True)
         starts = {"a0": "0,0", "a1": "3,3"}
         goals = {"a0": "3,3", "a1": "0,0"}
 
-        pbs_result, pbs_goals = run_mapf_baseline(
+        priority_run = run_mapf_baseline(
             G,
             starts,
             goals,
-            baseline="pbs",
+            baseline="priority_search",
             max_time=16,
             use_external=False,
+            router=router,
         )
-        self.assertTrue(pbs_result.success, pbs_result.diagnostics)
-        pbs_row = benchmark_row("pbs", 0, 2, starts, pbs_goals, pbs_result)
-        self.assertEqual(pbs_row.success_rate, 1.0)
-        self.assertEqual(pbs_row.conflicts_total, 0)
+        self.assertTrue(priority_run.result.success, priority_run.result.diagnostics)
+        priority_row = benchmark_row(
+            "priority_search",
+            0,
+            2,
+            starts,
+            priority_run.goals,
+            priority_run,
+            router=router,
+        )
+        self.assertEqual(priority_row.success_rate, 1.0)
+        self.assertEqual(priority_row.conflicts_total, 0)
+        self.assertGreater(priority_row.lower_bound_steps, 0)
+        self.assertGreaterEqual(priority_row.elapsed_s, priority_row.elapsed_planner_s)
 
-        cbs_result, cbs_goals = run_mapf_baseline(
+        cbs_run = run_mapf_baseline(
             G,
             starts,
             goals,
             baseline="hungarian_cbs",
             max_time=16,
             use_external=False,
+            router=router,
         )
-        self.assertTrue(cbs_result.success, cbs_result.diagnostics)
-        self.assertEqual(set(cbs_goals), set(starts))
+        self.assertTrue(cbs_run.result.success, cbs_run.result.diagnostics)
+        self.assertEqual(set(cbs_run.goals), set(starts))
+        self.assertGreater(cbs_run.elapsed_assignment_s, 0.0)
 
     def test_run_benchmark_writes_csv(self):
         G = _grid_graph(4, 4)
@@ -76,7 +91,7 @@ class TestBenchmarkRunner(unittest.TestCase):
             G,
             agent_counts=[2],
             seeds=[0],
-            baselines=["pbs", "fifo_nearest"],
+            baselines=["priority_search", "fifo_nearest"],
             max_time=16,
             use_external=False,
         )
@@ -84,7 +99,10 @@ class TestBenchmarkRunner(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             out = write_benchmark_csv(rows, Path(tmp) / "baselines.csv")
             self.assertTrue(out.exists())
-            self.assertIn("instance_makespan", out.read_text(encoding="utf-8"))
+            text = out.read_text(encoding="utf-8")
+            self.assertIn("instance_makespan", text)
+            self.assertIn("elapsed_assignment_s", text)
+            self.assertIn("lower_bound_steps", text)
 
 
 if __name__ == "__main__":

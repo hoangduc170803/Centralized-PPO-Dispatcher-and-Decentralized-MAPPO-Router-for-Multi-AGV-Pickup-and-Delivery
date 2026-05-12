@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import unittest
+from unittest.mock import patch
 
 import networkx as nx
 
@@ -92,11 +93,15 @@ class TestPrioritizedGraphPlanner(unittest.TestCase):
         self.assertEqual(diag["coord_collision_nodes"], 1)
         self.assertEqual(diag["coord_collision_samples"][0]["node"], "halt")
 
-        result = planner.plan(
-            starts={"a0": "halt"},
-            goals={"a0": "goal"},
-            fallback_on_failure=False,
-        )
+        with patch(
+            "src.mapf.cbs_solver.importlib.import_module",
+            side_effect=ImportError("simulated missing cbs-mapf"),
+        ):
+            result = planner.plan(
+                starts={"a0": "halt"},
+                goals={"a0": "goal"},
+                fallback_on_failure=False,
+            )
         self.assertFalse(result.success)
         self.assertEqual(result.diagnostics["coord_collision_nodes"], 1)
         self.assertEqual(result.diagnostics["error"], "node has no unique compact coordinate")

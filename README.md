@@ -41,6 +41,8 @@ python -m src.baselines.benchmark --agents 10 15 20 --seeds 0 1 2 3 4
 
 Use `--no-external` when you want deterministic graph-native fallback only,
 without attempting the optional `cbs-mapf` grid backend.
+The `priority_search` baseline is multi-order prioritized planning, not full
+PBS constraint-tree search.
 
 For one-shot MAPF/CBS baselines, pass the planner makespan into the rollout
 logger so the CSV/JSON metrics do not confuse lifelong MAPD completion time

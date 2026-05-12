@@ -10,6 +10,8 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import math
+import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Iterable, Mapping, Sequence
@@ -32,7 +34,7 @@ DEFAULT_MAP_FILE = (
     / "orca_share_media1778260607027_7458565577098821053.xml"
 )
 DEFAULT_OUTPUT = Path(__file__).resolve().parents[2] / "results" / "baselines" / "sprint2_mapf_baselines.csv"
-DEFAULT_BASELINES = ("cbs", "pbs", "hungarian_cbs", "fifo_nearest")
+DEFAULT_BASELINES = ("cbs", "priority_search", "hungarian_cbs", "fifo_nearest")
 
 
 @dataclass(frozen=True)
@@ -46,14 +48,33 @@ class BenchmarkRow:
     success_rate: float
     solver: str
     instance_makespan: int
+    lower_bound_steps: int
+    lower_bound_distance: float
+    makespan_over_lower_bound: float
     sum_of_costs: int
     waiting_time_agent_steps: int
     throughput_tasks_per_1000_steps: float
     conflicts_total: int
+    elapsed_assignment_s: float
+    elapsed_planner_s: float
     elapsed_s: float
     starts_json: str
     goals_json: str
     diagnostics_json: str
+
+
+@dataclass(frozen=True)
+class BaselineRun:
+    """Planner result plus benchmark timing metadata."""
+
+    result: MAPFPlanResult
+    goals: dict[str, str]
+    elapsed_assignment_s: float = 0.0
+    elapsed_planner_s: float = 0.0
+
+    @property
+    def elapsed_s(self) -> float:
+        return self.elapsed_assignment_s + self.elapsed_planner_s
 
 
 def sample_mapf_instance(
@@ -85,53 +106,71 @@ def run_mapf_baseline(
     max_time: int = 512,
     use_external: bool = True,
     router: AStarRouter | None = None,
-) -> tuple[MAPFPlanResult, dict[str, str]]:
+) -> BaselineRun:
     """Run one Sprint 2 baseline and return result plus assigned goals."""
     baseline_key = baseline.lower()
     assigned_goals = dict(goals)
 
     if baseline_key in {"hungarian_cbs", "hungarian"}:
         assignment_router = router if router is not None else AStarRouter(G, precompute=True)
+        assignment_start = time.perf_counter()
         assignments = hungarian_goal_assignment(starts, list(goals.values()), assignment_router)
+        elapsed_assignment_s = time.perf_counter() - assignment_start
         assigned_goals = {agent: item.goal for agent, item in assignments.items()}
+        planner_start = time.perf_counter()
         result = CBSMapfPlanner(G, max_time=max_time).plan(
             starts,
             assigned_goals,
             use_external=use_external,
         )
+        elapsed_planner_s = time.perf_counter() - planner_start
         result.diagnostics["assignment"] = "hungarian_goal"
         result.diagnostics["assigned_agents"] = len(assigned_goals)
-        return result, assigned_goals
+        result.diagnostics["external_backend_enabled"] = use_external
+        return BaselineRun(result, assigned_goals, elapsed_assignment_s, elapsed_planner_s)
 
     if baseline_key in {"fifo_nearest", "fifo_nearest_cbs"}:
         assignment_router = router if router is not None else AStarRouter(G, precompute=True)
+        assignment_start = time.perf_counter()
         assignments = fifo_nearest_goal_assignment(starts, list(goals.values()), assignment_router)
+        elapsed_assignment_s = time.perf_counter() - assignment_start
         assigned_goals = {agent: item.goal for agent, item in assignments.items()}
+        planner_start = time.perf_counter()
         result = CBSMapfPlanner(G, max_time=max_time).plan(
             starts,
             assigned_goals,
             use_external=use_external,
         )
+        elapsed_planner_s = time.perf_counter() - planner_start
         result.diagnostics["assignment"] = "fifo_nearest_goal"
         result.diagnostics["assigned_agents"] = len(assigned_goals)
-        return result, assigned_goals
+        result.diagnostics["external_backend_enabled"] = use_external
+        return BaselineRun(result, assigned_goals, elapsed_assignment_s, elapsed_planner_s)
 
     if baseline_key in {"pbs", "priority_search"}:
+        planner_start = time.perf_counter()
         result = PrioritySearchPlanner(G, max_time=max_time).plan(
             starts,
             assigned_goals,
             seed=seed,
         )
-        return result, assigned_goals
+        elapsed_planner_s = time.perf_counter() - planner_start
+        result.diagnostics["baseline_note"] = (
+            "multi-order prioritized planning; full PBS constraint tree deferred"
+        )
+        return BaselineRun(result, assigned_goals, 0.0, elapsed_planner_s)
 
     if baseline_key in {"cbs", "direct_cbs", "cbs_mapf"}:
+        planner_start = time.perf_counter()
         result = CBSMapfPlanner(G, max_time=max_time).plan(
             starts,
             assigned_goals,
             use_external=use_external,
         )
+        elapsed_planner_s = time.perf_counter() - planner_start
         result.diagnostics["assignment"] = "fixed_agent_goal_pairs"
-        return result, assigned_goals
+        result.diagnostics["external_backend_enabled"] = use_external
+        return BaselineRun(result, assigned_goals, 0.0, elapsed_planner_s)
 
     raise ValueError(f"unknown baseline: {baseline}")
 
@@ -146,16 +185,12 @@ def run_benchmark(
 ) -> list[BenchmarkRow]:
     """Run a grid of baseline/agent-count/seed experiments."""
     rows: list[BenchmarkRow] = []
-    needs_router = any(
-        baseline.lower() in {"hungarian_cbs", "hungarian", "fifo_nearest", "fifo_nearest_cbs"}
-        for baseline in baselines
-    )
-    router = AStarRouter(G, precompute=True) if needs_router else None
+    router = AStarRouter(G, precompute=True)
     for num_agents in agent_counts:
         for seed in seeds:
             starts, direct_goals = sample_mapf_instance(G, num_agents, seed)
             for baseline in baselines:
-                result, assigned_goals = run_mapf_baseline(
+                run = run_mapf_baseline(
                     G,
                     starts,
                     direct_goals,
@@ -171,8 +206,9 @@ def run_benchmark(
                         seed=seed,
                         num_agents=num_agents,
                         starts=starts,
-                        goals=assigned_goals,
-                        result=result,
+                        goals=run.goals,
+                        run=run,
+                        router=router,
                     )
                 )
     return rows
@@ -184,12 +220,20 @@ def benchmark_row(
     num_agents: int,
     starts: Mapping[str, str],
     goals: Mapping[str, str],
-    result: MAPFPlanResult,
+    run: BaselineRun,
+    router: AStarRouter | None = None,
 ) -> BenchmarkRow:
     """Convert a planner result into a stable CSV row."""
+    result = run.result
     completed = num_agents if result.success else 0
     horizon = max(result.makespan, 1)
     throughput = completed / horizon * 1000.0
+    lower_bound_steps, lower_bound_distance = _lower_bounds(starts, goals, router)
+    ratio = (
+        result.makespan / lower_bound_steps
+        if result.success and lower_bound_steps > 0
+        else math.inf
+    )
     diagnostics = _json_dumpable(result.diagnostics)
     return BenchmarkRow(
         baseline=baseline,
@@ -199,11 +243,16 @@ def benchmark_row(
         success_rate=1.0 if result.success else 0.0,
         solver=result.solver,
         instance_makespan=result.makespan,
+        lower_bound_steps=lower_bound_steps,
+        lower_bound_distance=lower_bound_distance,
+        makespan_over_lower_bound=ratio,
         sum_of_costs=result.sum_of_costs,
         waiting_time_agent_steps=_waiting_time_agent_steps(result.paths, result.makespan),
         throughput_tasks_per_1000_steps=throughput,
         conflicts_total=len(result.conflicts),
-        elapsed_s=result.elapsed_s,
+        elapsed_assignment_s=run.elapsed_assignment_s,
+        elapsed_planner_s=run.elapsed_planner_s,
+        elapsed_s=run.elapsed_s,
         starts_json=json.dumps(dict(starts), sort_keys=True),
         goals_json=json.dumps(dict(goals), sort_keys=True),
         diagnostics_json=json.dumps(diagnostics, sort_keys=True),
@@ -232,6 +281,28 @@ def _waiting_time_agent_steps(
         total += sum(1 for i in range(1, len(path)) if path[i] == path[i - 1])
         total += max(0, makespan - (len(path) - 1))
     return total
+
+
+def _lower_bounds(
+    starts: Mapping[str, str],
+    goals: Mapping[str, str],
+    router: AStarRouter | None,
+) -> tuple[int, float]:
+    if router is None:
+        return 0, 0.0
+
+    max_steps = 0
+    max_distance = 0.0
+    for agent, start in starts.items():
+        goal = goals.get(agent)
+        if goal is None:
+            continue
+        path = router.path(start, goal)
+        if path is None:
+            return 0, math.inf
+        max_steps = max(max_steps, len(path) - 1)
+        max_distance = max(max_distance, router.distance(start, goal))
+    return max_steps, max_distance
 
 
 def _json_dumpable(value):
