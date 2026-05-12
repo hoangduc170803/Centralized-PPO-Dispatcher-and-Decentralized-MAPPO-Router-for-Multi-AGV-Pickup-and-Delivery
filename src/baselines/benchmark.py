@@ -23,6 +23,10 @@ from src.baselines.dispatchers import (
     fifo_nearest_goal_assignment,
     hungarian_goal_assignment,
 )
+from src.baselines.opentcs_default import (
+    OpenTCSDefaultEmulator,
+    opentcs_default_goal_assignment,
+)
 from src.map_parser import parse_opentcs_map
 from src.mapf.cbs_solver import CBSMapfPlanner, MAPFPlanResult
 from src.mapf.priority_search import PrioritySearchPlanner
@@ -34,7 +38,13 @@ DEFAULT_MAP_FILE = (
     / "orca_share_media1778260607027_7458565577098821053.xml"
 )
 DEFAULT_OUTPUT = Path(__file__).resolve().parents[2] / "results" / "baselines" / "sprint2_mapf_baselines.csv"
-DEFAULT_BASELINES = ("cbs", "priority_search", "hungarian_cbs", "fifo_nearest")
+DEFAULT_BASELINES = (
+    "cbs",
+    "priority_search",
+    "hungarian_cbs",
+    "fifo_nearest",
+    "opentcs_default_emulator",
+)
 
 
 @dataclass(frozen=True)
@@ -145,6 +155,27 @@ def run_mapf_baseline(
         result.diagnostics["assignment"] = "fifo_nearest_goal"
         result.diagnostics["assigned_agents"] = len(assigned_goals)
         result.diagnostics["external_backend_enabled"] = use_external
+        return BaselineRun(result, assigned_goals, elapsed_assignment_s, elapsed_planner_s)
+
+    if baseline_key in {"opentcs_default_emulator", "opentcs_default"}:
+        assignment_router = router if router is not None else AStarRouter(G, precompute=True)
+        assignment_start = time.perf_counter()
+        assignments = opentcs_default_goal_assignment(
+            starts,
+            list(goals.values()),
+            assignment_router,
+        )
+        elapsed_assignment_s = time.perf_counter() - assignment_start
+        assigned_goals = {agent: item.goal for agent, item in assignments.items()}
+        planner_start = time.perf_counter()
+        result = OpenTCSDefaultEmulator(G, max_time=max_time).plan(
+            starts,
+            assigned_goals,
+            assignment_router,
+        )
+        elapsed_planner_s = time.perf_counter() - planner_start
+        result.diagnostics["assigned_agents"] = len(assigned_goals)
+        result.diagnostics["emulation_scope"] = "dispatcher_router_scheduler"
         return BaselineRun(result, assigned_goals, elapsed_assignment_s, elapsed_planner_s)
 
     if baseline_key in {"pbs", "priority_search"}:

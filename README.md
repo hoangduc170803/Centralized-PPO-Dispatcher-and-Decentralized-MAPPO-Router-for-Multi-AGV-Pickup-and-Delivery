@@ -43,6 +43,9 @@ Use `--no-external` when you want deterministic graph-native fallback only,
 without attempting the optional `cbs-mapf` grid backend.
 The `priority_search` baseline is multi-order prioritized planning, not full
 PBS constraint-tree search.
+The `opentcs_default_emulator` baseline approximates the default OpenTCS stack
+shape for thesis comparison: dispatcher-style cost-greedy assignment, shortest
+path routing, and queued resource-allocation waits.
 
 For one-shot MAPF/CBS baselines, pass the planner makespan into the rollout
 logger so the CSV/JSON metrics do not confuse lifelong MAPD completion time

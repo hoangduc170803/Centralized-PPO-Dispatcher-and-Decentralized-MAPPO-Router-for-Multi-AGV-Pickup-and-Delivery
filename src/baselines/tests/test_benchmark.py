@@ -85,6 +85,19 @@ class TestBenchmarkRunner(unittest.TestCase):
         self.assertEqual(set(cbs_run.goals), set(starts))
         self.assertGreater(cbs_run.elapsed_assignment_s, 0.0)
 
+        opentcs_run = run_mapf_baseline(
+            G,
+            starts,
+            goals,
+            baseline="opentcs_default_emulator",
+            max_time=16,
+            use_external=False,
+            router=router,
+        )
+        self.assertEqual(opentcs_run.result.solver, "opentcs_default_emulator")
+        self.assertEqual(set(opentcs_run.goals), set(starts))
+        self.assertGreaterEqual(opentcs_run.elapsed_assignment_s, 0.0)
+
     def test_run_benchmark_writes_csv(self):
         G = _grid_graph(4, 4)
         rows = run_benchmark(
