@@ -1,4 +1,4 @@
-# IPPO MAPF / MAPD Warehouse Simulator
+# MAPPO MAPF / MAPD Warehouse Simulator
 
 Python tooling for parsing an OpenTCS warehouse map, running graph routing/MAPF
 baselines, visualizing topology, and logging MAPD rollout metrics.
