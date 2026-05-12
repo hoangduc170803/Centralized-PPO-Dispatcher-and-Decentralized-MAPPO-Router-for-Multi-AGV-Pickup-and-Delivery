@@ -41,11 +41,25 @@ python -m src.baselines.benchmark --agents 10 15 20 --seeds 0 1 2 3 4
 
 Use `--no-external` when you want deterministic graph-native fallback only,
 without attempting the optional `cbs-mapf` grid backend.
+The default CSV uses paper-safe labels for the graph-native baselines:
+`prioritized_planning_default_order` and
+`hungarian_prioritized_planning` plus
+`fifo_nearest_prioritized_planning`. The optional `cbs` / `hungarian_cbs` /
+`fifo_nearest` aliases still exist for adapter smoke experiments, but the
+warehouse benchmark should not call them "CBS" unless rows actually report
+`solver=cbs_mapf`.
 The `priority_search` baseline is multi-order prioritized planning, not full
 PBS constraint-tree search.
 The `opentcs_default_emulator` baseline approximates the default OpenTCS stack
 shape for thesis comparison: dispatcher-style cost-greedy assignment, shortest
-path routing, and queued resource-allocation waits.
+path routing, and queued resource-allocation waits. It deliberately does not
+emulate production deadlock recovery/rerouting, so cyclic waits can time out.
+
+Summarize a raw benchmark CSV into a compact markdown table:
+
+```powershell
+python -m src.baselines.aggregate results/baselines/sprint2_mapf_baselines.csv
+```
 
 For one-shot MAPF/CBS baselines, pass the planner makespan into the rollout
 logger so the CSV/JSON metrics do not confuse lifelong MAPD completion time

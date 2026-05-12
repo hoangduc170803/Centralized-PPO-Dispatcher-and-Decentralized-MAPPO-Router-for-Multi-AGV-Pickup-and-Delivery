@@ -71,6 +71,19 @@ class TestOpenTCSDefaultEmulator(unittest.TestCase):
         self.assertGreater(result.diagnostics["blocked_move_requests"], 0)
         self.assertEqual(result.solver, "opentcs_default_emulator")
 
+    def test_head_on_swap_times_out_without_deadlock_recovery(self):
+        G = _line_graph()
+        router = AStarRouter(G, precompute=True)
+        planner = OpenTCSDefaultEmulator(G, max_time=8)
+        result = planner.plan(
+            starts={"agv_0": "0", "agv_1": "3"},
+            goals={"agv_0": "3", "agv_1": "0"},
+            router=router,
+        )
+        self.assertFalse(result.success)
+        self.assertTrue(result.diagnostics["timed_out"])
+        self.assertEqual(result.diagnostics["deadlock_recovery"], "not_emulated")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

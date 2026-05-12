@@ -42,7 +42,7 @@ class TestBenchmarkRunner(unittest.TestCase):
         self.assertEqual(goals_a, goals_b)
         self.assertEqual(len(set(starts_a.values()) | set(goals_a.values())), 6)
 
-    def test_runs_priority_search_and_hungarian_cbs_rows(self):
+    def test_runs_priority_search_and_hungarian_prioritized_rows(self):
         G = _grid_graph(4, 4)
         router = AStarRouter(G, precompute=True)
         starts = {"a0": "0,0", "a1": "3,3"}
@@ -76,7 +76,7 @@ class TestBenchmarkRunner(unittest.TestCase):
             G,
             starts,
             goals,
-            baseline="hungarian_cbs",
+            baseline="hungarian_prioritized_planning",
             max_time=16,
             use_external=False,
             router=router,
@@ -104,11 +104,15 @@ class TestBenchmarkRunner(unittest.TestCase):
             G,
             agent_counts=[2],
             seeds=[0],
-            baselines=["priority_search", "fifo_nearest"],
+            baselines=[
+                "priority_search",
+                "fifo_nearest_prioritized_planning",
+                "prioritized_planning_default_order",
+            ],
             max_time=16,
             use_external=False,
         )
-        self.assertEqual(len(rows), 2)
+        self.assertEqual(len(rows), 3)
         with tempfile.TemporaryDirectory() as tmp:
             out = write_benchmark_csv(rows, Path(tmp) / "baselines.csv")
             self.assertTrue(out.exists())
@@ -116,6 +120,7 @@ class TestBenchmarkRunner(unittest.TestCase):
             self.assertIn("instance_makespan", text)
             self.assertIn("elapsed_assignment_s", text)
             self.assertIn("lower_bound_steps", text)
+            self.assertIn("failure_reason", text)
 
 
 if __name__ == "__main__":

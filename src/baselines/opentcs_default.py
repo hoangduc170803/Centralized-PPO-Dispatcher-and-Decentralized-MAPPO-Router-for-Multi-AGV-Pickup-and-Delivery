@@ -8,7 +8,8 @@ This emulator is intentionally scoped for the Sprint 2 one-shot MAPF table:
     allocations would conflict.
 
 It is not a drop-in implementation of the openTCS kernel. It is a documented,
-deterministic emulator for the default production control stack shape.
+deterministic emulator for the default production control stack shape. Deadlock
+recovery/rerouting is deliberately not emulated; cyclic waits therefore time out.
 """
 
 from __future__ import annotations
@@ -200,6 +201,7 @@ class OpenTCSDefaultEmulator:
             "assignment": "opentcs_default_dispatcher_vehicle_first_cost_greedy",
             "routing": "individual_shortest_path_distance",
             "scheduler": "queued_resource_allocator_emulator",
+            "deadlock_recovery": "not_emulated",
             "blocked_move_requests": blocked_move_requests,
             "queued_retries": queued_retries,
             "routes": {agent: len(route.nodes) - 1 for agent, route in routes.items()},

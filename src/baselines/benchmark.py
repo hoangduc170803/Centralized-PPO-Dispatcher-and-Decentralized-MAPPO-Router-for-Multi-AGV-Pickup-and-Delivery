@@ -39,10 +39,10 @@ DEFAULT_MAP_FILE = (
 )
 DEFAULT_OUTPUT = Path(__file__).resolve().parents[2] / "results" / "baselines" / "sprint2_mapf_baselines.csv"
 DEFAULT_BASELINES = (
-    "cbs",
+    "prioritized_planning_default_order",
     "priority_search",
-    "hungarian_cbs",
-    "fifo_nearest",
+    "hungarian_prioritized_planning",
+    "fifo_nearest_prioritized_planning",
     "opentcs_default_emulator",
 )
 
@@ -57,6 +57,7 @@ class BenchmarkRow:
     success: bool
     success_rate: float
     solver: str
+    failure_reason: str
     instance_makespan: int
     lower_bound_steps: int
     lower_bound_distance: float
@@ -121,6 +122,25 @@ def run_mapf_baseline(
     baseline_key = baseline.lower()
     assigned_goals = dict(goals)
 
+    if baseline_key in {"hungarian_prioritized_planning", "hungarian_pp"}:
+        assignment_router = router if router is not None else AStarRouter(G, precompute=True)
+        assignment_start = time.perf_counter()
+        assignments = hungarian_goal_assignment(starts, list(goals.values()), assignment_router)
+        elapsed_assignment_s = time.perf_counter() - assignment_start
+        assigned_goals = {agent: item.goal for agent, item in assignments.items()}
+        planner_start = time.perf_counter()
+        result = CBSMapfPlanner(G, max_time=max_time).plan(
+            starts,
+            assigned_goals,
+            use_external=False,
+        )
+        elapsed_planner_s = time.perf_counter() - planner_start
+        result.diagnostics["assignment"] = "hungarian_goal"
+        result.diagnostics["assigned_agents"] = len(assigned_goals)
+        result.diagnostics["external_backend_enabled"] = False
+        result.diagnostics["baseline_note"] = "Hungarian assignment + graph-native prioritized planning"
+        return BaselineRun(result, assigned_goals, elapsed_assignment_s, elapsed_planner_s)
+
     if baseline_key in {"hungarian_cbs", "hungarian"}:
         assignment_router = router if router is not None else AStarRouter(G, precompute=True)
         assignment_start = time.perf_counter()
@@ -137,6 +157,25 @@ def run_mapf_baseline(
         result.diagnostics["assignment"] = "hungarian_goal"
         result.diagnostics["assigned_agents"] = len(assigned_goals)
         result.diagnostics["external_backend_enabled"] = use_external
+        return BaselineRun(result, assigned_goals, elapsed_assignment_s, elapsed_planner_s)
+
+    if baseline_key in {"fifo_nearest_prioritized_planning", "fifo_nearest_pp"}:
+        assignment_router = router if router is not None else AStarRouter(G, precompute=True)
+        assignment_start = time.perf_counter()
+        assignments = fifo_nearest_goal_assignment(starts, list(goals.values()), assignment_router)
+        elapsed_assignment_s = time.perf_counter() - assignment_start
+        assigned_goals = {agent: item.goal for agent, item in assignments.items()}
+        planner_start = time.perf_counter()
+        result = CBSMapfPlanner(G, max_time=max_time).plan(
+            starts,
+            assigned_goals,
+            use_external=False,
+        )
+        elapsed_planner_s = time.perf_counter() - planner_start
+        result.diagnostics["assignment"] = "fifo_nearest_goal"
+        result.diagnostics["assigned_agents"] = len(assigned_goals)
+        result.diagnostics["external_backend_enabled"] = False
+        result.diagnostics["baseline_note"] = "FIFO-nearest assignment + graph-native prioritized planning"
         return BaselineRun(result, assigned_goals, elapsed_assignment_s, elapsed_planner_s)
 
     if baseline_key in {"fifo_nearest", "fifo_nearest_cbs"}:
@@ -189,6 +228,19 @@ def run_mapf_baseline(
         result.diagnostics["baseline_note"] = (
             "multi-order prioritized planning; full PBS constraint tree deferred"
         )
+        return BaselineRun(result, assigned_goals, 0.0, elapsed_planner_s)
+
+    if baseline_key in {"prioritized_planning_default_order", "prioritized_planning"}:
+        planner_start = time.perf_counter()
+        result = CBSMapfPlanner(G, max_time=max_time).plan(
+            starts,
+            assigned_goals,
+            use_external=False,
+        )
+        elapsed_planner_s = time.perf_counter() - planner_start
+        result.diagnostics["assignment"] = "fixed_agent_goal_pairs"
+        result.diagnostics["external_backend_enabled"] = False
+        result.diagnostics["baseline_note"] = "graph-native prioritized planning in default agent order"
         return BaselineRun(result, assigned_goals, 0.0, elapsed_planner_s)
 
     if baseline_key in {"cbs", "direct_cbs", "cbs_mapf"}:
@@ -273,6 +325,7 @@ def benchmark_row(
         success=result.success,
         success_rate=1.0 if result.success else 0.0,
         solver=result.solver,
+        failure_reason=_failure_reason(result),
         instance_makespan=result.makespan,
         lower_bound_steps=lower_bound_steps,
         lower_bound_distance=lower_bound_distance,
@@ -334,6 +387,20 @@ def _lower_bounds(
         max_steps = max(max_steps, len(path) - 1)
         max_distance = max(max_distance, router.distance(start, goal))
     return max_steps, max_distance
+
+
+def _failure_reason(result: MAPFPlanResult) -> str:
+    if result.success:
+        return ""
+    diagnostics = result.diagnostics
+    if diagnostics.get("timed_out"):
+        return "timeout"
+    if result.conflicts:
+        return "conflict"
+    error = str(diagnostics.get("error", "")).lower()
+    if "unroutable" in error or "no paths" in error or "no unique compact coordinate" in error:
+        return "unreachable"
+    return "planner_failure"
 
 
 def _json_dumpable(value):
