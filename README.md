@@ -71,6 +71,10 @@ prioritized planners for reproducibility on the directed topology.
 time can vary sharply with agent count and seed. Treat its latency as a
 worst-case-budgeted method rather than assuming monotonic scaling.
 
+Makespan, waiting-time, throughput, and ratio summaries are computed on
+successful runs only. Always present these charts together with success rate;
+otherwise low-success methods can look deceptively fast.
+
 For one-shot MAPF/CBS baselines, pass the planner makespan into the rollout
 logger so the CSV/JSON metrics do not confuse lifelong MAPD completion time
 with one-shot MAPF makespan:

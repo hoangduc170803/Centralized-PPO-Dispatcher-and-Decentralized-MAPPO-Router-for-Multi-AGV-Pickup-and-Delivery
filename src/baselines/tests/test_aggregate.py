@@ -41,7 +41,9 @@ class TestAggregate(unittest.TestCase):
         self.assertAlmostEqual(row["mean_makespan_success"], 50.0)
         self.assertTrue(math.isnan(row["std_makespan_success"]))
         self.assertEqual(row["failure_reasons"], "timeout:1")
-        self.assertIn("priority_search", render_markdown(summary))
+        rendered = render_markdown(summary)
+        self.assertIn("priority_search", rendered)
+        self.assertIn("mean_makespan_success", rendered)
 
 
 if __name__ == "__main__":

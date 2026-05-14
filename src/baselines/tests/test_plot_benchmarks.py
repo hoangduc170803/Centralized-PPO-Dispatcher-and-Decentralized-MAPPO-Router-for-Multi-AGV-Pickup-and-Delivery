@@ -2,19 +2,24 @@
 
 from __future__ import annotations
 
+import importlib.util
 import math
 import unittest
 
-import pandas as pd
+PANDAS_AVAILABLE = importlib.util.find_spec("pandas") is not None
 
-from src.baselines.plot_benchmarks import (
-    _asymmetric_yerr,
-    _missing_bar_height,
-    normalize_benchmark_df,
-    summarize_benchmarks,
-)
+if PANDAS_AVAILABLE:
+    import pandas as pd
+
+    from src.baselines.plot_benchmarks import (
+        _asymmetric_yerr,
+        _missing_bar_height,
+        normalize_benchmark_df,
+        summarize_benchmarks,
+    )
 
 
+@unittest.skipUnless(PANDAS_AVAILABLE, "pandas not installed")
 class TestPlotBenchmarks(unittest.TestCase):
     def test_summarize_uses_successful_runs_for_performance_metrics(self):
         df = pd.DataFrame(
