@@ -12,12 +12,14 @@ import time
 import unittest
 from pathlib import Path
 
+import networkx as nx
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from env.compass_mapper import NUM_ACTIONS, WAIT_SLOT
 from env.reward_shaper import RewardConfig
+from env.task_generator import Task
 from env.warehouse_env import AgentState, WarehouseEnv
 from map_parser import parse_opentcs_map
 from routing.astar import AStarRouter
@@ -41,6 +43,34 @@ def _make_env(num_agents=5, horizon=64, seed=0):
         task_rate=0.1,
         seed=seed,
     )
+
+
+def _line_env(lookahead_action_mask=True):
+    G = nx.DiGraph()
+    for x in range(3):
+        G.add_node(str(x), x=float(x), y=0.0)
+    for x in range(2):
+        G.add_edge(str(x), str(x + 1), length=1.0)
+        G.add_edge(str(x + 1), str(x), length=1.0)
+    router = AStarRouter(G, precompute=True)
+    return WarehouseEnv(
+        graph=G,
+        router=router,
+        num_agents=2,
+        episode_horizon=8,
+        task_rate=0.0,
+        knn_agents=1,
+        lookahead_action_mask=lookahead_action_mask,
+        seed=0,
+    )
+
+
+def _slot_to(env, src, target):
+    _, s2n = env.compass.get(src)
+    for slot, nbr in s2n.items():
+        if nbr == target:
+            return slot
+    raise AssertionError(f"no compass slot from {src!r} to {target!r}")
 
 
 class TestWarehouseEnv(unittest.TestCase):
@@ -109,6 +139,67 @@ class TestWarehouseEnv(unittest.TestCase):
         for a, agent_obs in obs.items():
             # action_mask must have at least WAIT valid
             self.assertGreaterEqual(int(agent_obs["action_mask"].sum()), 1)
+
+    def test_lookahead_mask_blocks_currently_occupied_node(self):
+        env = _line_env(lookahead_action_mask=True)
+        env.reset(seed=0)
+        a0, a1 = env.agents
+        env._agent_info[a0].pos = "0"
+        env._agent_info[a0].prev_pos = "0"
+        env._agent_info[a1].pos = "1"
+        env._agent_info[a1].prev_pos = "1"
+        for agent in (a0, a1):
+            env._agent_info[agent].task = None
+            env._agent_info[agent].state = AgentState.IDLE
+
+        slot_into_occupied = _slot_to(env, "0", "1")
+        mask = env._build_obs(a0)["action_mask"]
+
+        self.assertEqual(int(mask[slot_into_occupied]), 0)
+        self.assertEqual(int(mask[WAIT_SLOT]), 1)
+
+    def test_lookahead_mask_blocks_predicted_next_node(self):
+        env = _line_env(lookahead_action_mask=True)
+        env.reset(seed=0)
+        a0, a1 = env.agents
+        env._agent_info[a0].pos = "0"
+        env._agent_info[a0].prev_pos = "0"
+        env._agent_info[a0].task = None
+        env._agent_info[a0].state = AgentState.IDLE
+
+        env._agent_info[a1].pos = "2"
+        env._agent_info[a1].prev_pos = "2"
+        env._agent_info[a1].task = Task(
+            id=123,
+            pickup="0",
+            dropoff="2",
+            spawn_step=0,
+            assigned_to=a1,
+        )
+        env._agent_info[a1].state = AgentState.TO_PICKUP
+
+        # Agent 1's A* hint is 2 -> 1, so agent 0 should not be allowed to
+        # reserve node 1 at the same next timestep.
+        slot_to_predicted = _slot_to(env, "0", "1")
+        mask = env._build_obs(a0)["action_mask"]
+
+        self.assertEqual(int(mask[slot_to_predicted]), 0)
+        self.assertEqual(int(mask[WAIT_SLOT]), 1)
+
+    def test_lookahead_mask_can_be_disabled_for_ablation(self):
+        env = _line_env(lookahead_action_mask=False)
+        env.reset(seed=0)
+        a0, a1 = env.agents
+        env._agent_info[a0].pos = "0"
+        env._agent_info[a1].pos = "1"
+        for agent in (a0, a1):
+            env._agent_info[agent].task = None
+            env._agent_info[agent].state = AgentState.IDLE
+
+        slot_into_occupied = _slot_to(env, "0", "1")
+        mask = env._build_obs(a0)["action_mask"]
+
+        self.assertEqual(int(mask[slot_into_occupied]), 1)
 
     def test_steps_per_second_throughput(self):
         env = _make_env(num_agents=5, horizon=512, seed=4)

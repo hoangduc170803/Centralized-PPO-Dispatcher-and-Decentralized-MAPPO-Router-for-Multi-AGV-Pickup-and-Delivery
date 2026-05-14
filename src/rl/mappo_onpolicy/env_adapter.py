@@ -66,6 +66,7 @@ class WarehouseEnvConfig:
     episode_horizon: int = 128
     task_rate: float = 0.1
     knn_agents: int = 3
+    lookahead_action_mask: bool = True
     seed: int = 0
 
 
@@ -80,6 +81,7 @@ def build_warehouse_env(cfg: WarehouseEnvConfig) -> WarehouseEnv:
         episode_horizon=cfg.episode_horizon,
         task_rate=cfg.task_rate,
         knn_agents=cfg.knn_agents,
+        lookahead_action_mask=cfg.lookahead_action_mask,
         seed=cfg.seed,
     )
 

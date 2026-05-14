@@ -128,6 +128,22 @@ The Sprint 3 defaults use a conservative PPO update budget
 (`ppo_epoch=4`, `num_mini_batch=4`) and higher exploration pressure
 (`entropy_coef=0.03`) after the first 200k-step run showed early entropy
 collapse.
+Action masks also include a conservative one-step look-ahead by default:
+graph-invalid moves are masked, and so are moves into currently occupied nodes,
+nodes another AGV is predicted to occupy next, or reverse traversal of a
+predicted edge. Use `--disable_lookahead_action_mask` only for ablations.
+
+Treat 200k env steps as a smoke run. For thesis-grade 5-AGV learning curves,
+budget at least 1-5M env steps and compare multiple seeds:
+
+```powershell
+python -m src.rl.mappo_onpolicy.train `
+    --num_agents_target 5 `
+    --episode_length 128 `
+    --num_env_steps 1000000 `
+    --hidden_size 64 --layer_N 2 `
+    --experiment_name sprint3_5agv_1m --seed 0
+```
 
 Logs land in `results/sprint3/onpolicy_smoke/<experiment>_seed<seed>/`:
 

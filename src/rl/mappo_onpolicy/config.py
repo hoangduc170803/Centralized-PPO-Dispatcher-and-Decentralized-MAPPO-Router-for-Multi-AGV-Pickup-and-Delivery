@@ -102,6 +102,15 @@ def get_warehouse_config() -> argparse.ArgumentParser:
         help="Number of nearest neighbours encoded in each agent's observation.",
     )
     group.add_argument(
+        "--disable_lookahead_action_mask",
+        action="store_true",
+        help=(
+            "Disable the conservative one-step collision look-ahead mask. "
+            "By default, action masks remove graph-invalid moves plus moves "
+            "into occupied/predicted-occupied nodes."
+        ),
+    )
+    group.add_argument(
         "--results_dir",
         type=Path,
         default=Path("results") / "sprint3" / "onpolicy_smoke",

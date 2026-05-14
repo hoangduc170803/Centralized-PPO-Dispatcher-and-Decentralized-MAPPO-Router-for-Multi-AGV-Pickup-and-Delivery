@@ -63,6 +63,7 @@ def _make_vec_envs(all_args, num_threads: int) -> DummyVecEnv:
             episode_horizon=horizon,
             task_rate=all_args.task_rate,
             knn_agents=all_args.knn_agents,
+            lookahead_action_mask=not all_args.disable_lookahead_action_mask,
             seed=all_args.seed + 1000 * rank,
         )
         return WarehouseOnPolicyEnv(cfg)

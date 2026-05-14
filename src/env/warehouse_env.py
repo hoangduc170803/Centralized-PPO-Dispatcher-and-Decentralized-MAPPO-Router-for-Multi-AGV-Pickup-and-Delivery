@@ -68,6 +68,7 @@ class WarehouseEnv(ParallelEnv):
         knn_agents: int = 3,
         max_tasks_in_pool: int = 50,
         validator_check_following: bool = True,
+        lookahead_action_mask: bool = True,
         reward_config: Optional[RewardConfig] = None,
         seed: Optional[int] = None,
     ):
@@ -84,6 +85,7 @@ class WarehouseEnv(ParallelEnv):
         self.task_rate = task_rate
         self.knn = knn_agents
         self.max_tasks_in_pool = max_tasks_in_pool
+        self.lookahead_action_mask = lookahead_action_mask
 
         self.compass = CompassMapper(self.G)
         self.validator = SafetyValidator(check_following=validator_check_following)
@@ -192,6 +194,52 @@ class WarehouseEnv(ParallelEnv):
             out[3 * i : 3 * i + 3] = feat
         return out
 
+    def _predicted_next_node(self, agent: str) -> str:
+        """Best-effort one-step route prediction for dynamic action masking."""
+        info = self._agent_info[agent]
+        goal = info.task.current_goal if info.task is not None else None
+        if goal is None or goal == info.pos:
+            return info.pos
+        next_hop = self.router.next_hop(info.pos, goal)
+        if next_hop is None:
+            return info.pos
+        _, slot_to_nbr = self.compass.get(info.pos)
+        return next_hop if next_hop in slot_to_nbr.values() else info.pos
+
+    def _action_mask_for(self, agent: str) -> np.ndarray:
+        """Return graph-valid actions minus obvious one-step conflicts.
+
+        The post-policy validator remains the safety authority. This mask is a
+        learning aid: it removes moves into currently occupied nodes, nodes
+        another agent is predicted to occupy next, and reverse traversal of an
+        edge another agent is predicted to use. WAIT is always kept valid.
+        """
+        info = self._agent_info[agent]
+        mask, slot_to_nbr = self.compass.get(info.pos)
+        mask = mask.copy()
+        if not self.lookahead_action_mask or len(self._agent_info) <= 1:
+            return mask
+
+        reserved_nodes: set[str] = set()
+        reserved_edges: set[tuple[str, str]] = set()
+        for other, other_info in self._agent_info.items():
+            if other == agent:
+                continue
+            other_next = self._predicted_next_node(other)
+            reserved_nodes.add(other_info.pos)
+            reserved_nodes.add(other_next)
+            if other_next != other_info.pos:
+                reserved_edges.add((other_info.pos, other_next))
+
+        my_pos = info.pos
+        for slot, next_node in slot_to_nbr.items():
+            if slot == WAIT_SLOT:
+                continue
+            if next_node in reserved_nodes or (next_node, my_pos) in reserved_edges:
+                mask[slot] = 0
+        mask[WAIT_SLOT] = 1
+        return mask
+
     def _build_obs(self, agent: str) -> dict:
         info = self._agent_info[agent]
         goal = info.task.current_goal if info.task is not None else None
@@ -217,8 +265,7 @@ class WarehouseEnv(ParallelEnv):
                 knn,
             ]
         )
-        mask, _ = self.compass.get(info.pos)
-        return {"observation": flat, "action_mask": mask.copy()}
+        return {"observation": flat, "action_mask": self._action_mask_for(agent)}
 
     # ------------------------------------------------------------------ dispatch
 
@@ -300,7 +347,7 @@ class WarehouseEnv(ParallelEnv):
         self._step_idx += 1
         positions = [self._agent_info[a].pos for a in self.agents]
         slot_maps = [self.compass.get(p)[1] for p in positions]
-        masks = [self.compass.get(p)[0] for p in positions]
+        masks = [self._action_mask_for(a) for a in self.agents]
 
         # Capture raw action signals before validator. Defensive against
         # out-of-range actions (e.g., a buggy wrapper or random debug code
