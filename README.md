@@ -99,17 +99,48 @@ metrics = logger.finalize(instance_makespan=plan_result.makespan)
 `last_completion_step` is for streamed MAPD episodes. `instance_makespan` is for
 one-shot MAPF instances.
 
-## Sprint 3 MAPPO Smoke Training
+## Sprint 3 MAPPO Training (marlbenchmark/on-policy backend)
 
-Run the vanilla MLP MAPPO router prototype on the largest-SCC warehouse map:
+The Sprint 3 MAPPO Router stack is built on the official MAPPO implementation
+([marlbenchmark/on-policy](https://github.com/marlbenchmark/on-policy)), which
+ships PopArt / ValueNorm value normalization, per-agent advantage with a
+centralized critic, mini-batch SGD, KL-aware PPO updates, and built-in action
+masks (`available_actions`). The full upstream repo is vendored under
+`on-policy/` at commit `de66d7a4b23fac2513f56f96f73b3f5cb96695ac`; see
+[on-policy/PATCHES.md](on-policy/PATCHES.md) for the small compatibility patches.
+
+Tensorboard logs and pinned dependencies install with the base requirements
+(`tensorboardX>=2.6`). No additional pip install is required for the vendored
+package — `src.rl.mappo_onpolicy` puts `on-policy/` on `sys.path` automatically.
+
+Run a 5-AGV, 200k env-step smoke training on the largest-SCC warehouse map:
 
 ```powershell
-python -m src.rl.mappo_router.trainer --agents 5 --horizon 128 --steps 32 --updates 1
+python -m src.rl.mappo_onpolicy.train `
+    --num_agents_target 5 `
+    --episode_length 128 `
+    --num_env_steps 200000 `
+    --hidden_size 64 --layer_N 2 `
+    --experiment_name sprint3_smoke_5agv --seed 0
 ```
 
-This is a short smoke run, not a paper training curve. It verifies the
-parameter-shared actor, centralized critic, action masks, safety validator, and
-rollout/update loop are wired together before longer experiments.
+Logs land in `results/sprint3/onpolicy_smoke/<experiment>_seed<seed>/`:
+
+- `logs/` - tensorboardX scalars per tag (open with `tensorboard --logdir`).
+- `models/actor.pt`, `models/critic.pt` - latest checkpoint pair.
+
+Extract scalars from the tfevents files into a per-tag JSON summary plus a
+long-form CSV (no tensorboard server needed):
+
+```powershell
+python -m src.rl.mappo_onpolicy.read_metrics `
+    --log-dir results/sprint3/onpolicy_smoke/sprint3_smoke_5agv_seed0/logs
+```
+
+Key tags include `average_step_rewards`, `dist_entropy`, `value_loss`,
+`policy_loss`, `ratio`, plus warehouse-specific aggregates under
+`warehouse/tasks_completed_total`, `warehouse/validator_intervention_rate`,
+and per-step conflict counters.
 
 ## Repository Layout
 
@@ -122,5 +153,6 @@ Commit the core project files:
 
 The local `cleanrl/` and `opentcs-integration-example/` folders are ignored as
 third-party checkouts. Keep them as separate upstream repos, forks, or submodules
-if they become part of the final thesis artifact.
-`PLAN.md` and `CLAUDE.md` are ignored local planning notes.
+if they become part of the final thesis artifact. The `on-policy/` checkout is
+tracked (with patches documented in `on-policy/PATCHES.md`), but its runtime
+outputs (`on-policy/runs/`, `on-policy/wandb/`, pycache) are ignored.
