@@ -39,6 +39,12 @@ Run the Sprint 2 classical baselines and write a CSV:
 python -m src.baselines.benchmark --agents 10 15 20 --seeds 0 1 2 3 4
 ```
 
+For journal-grade evaluation, increase to at least 20-30 seeds:
+
+```powershell
+python -m src.baselines.benchmark --agents 10 15 20 --seeds 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29
+```
+
 Use `--no-external` when you want deterministic graph-native fallback only,
 without attempting the optional `cbs-mapf` grid backend.
 The default CSV uses paper-safe labels for the graph-native baselines:
@@ -59,6 +65,13 @@ Summarize a raw benchmark CSV into a compact markdown table:
 
 ```powershell
 python -m src.baselines.aggregate results/baselines/sprint2_mapf_baselines.csv
+```
+
+For paper tables, include confidence intervals on success rate and all-run
+penalized metrics so failed runs are not hidden:
+
+```powershell
+python -m src.baselines.aggregate results/baselines/sprint2_mapf_baselines.csv --ci bootstrap --bootstrap-samples 10000 --failure-makespan-penalty 512
 ```
 
 For the thesis table, `lower_bound_steps` is the MAPF-IS lower bound:
