@@ -99,6 +99,18 @@ metrics = logger.finalize(instance_makespan=plan_result.makespan)
 `last_completion_step` is for streamed MAPD episodes. `instance_makespan` is for
 one-shot MAPF instances.
 
+## Sprint 3 MAPPO Smoke Training
+
+Run the vanilla MLP MAPPO router prototype on the largest-SCC warehouse map:
+
+```powershell
+python -m src.rl.mappo_router.trainer --agents 5 --horizon 128 --steps 32 --updates 1
+```
+
+This is a short smoke run, not a paper training curve. It verifies the
+parameter-shared actor, centralized critic, action masks, safety validator, and
+rollout/update loop are wired together before longer experiments.
+
 ## Repository Layout
 
 Commit the core project files:
