@@ -33,6 +33,61 @@ test. Without it, that single smoke test is skipped.
 
 ## MAPF Benchmark Logging
 
+Run the Sprint 2 classical baselines and write a CSV:
+
+```powershell
+python -m src.baselines.benchmark --agents 10 15 20 --seeds 0 1 2 3 4
+```
+
+For journal-grade evaluation, increase to at least 20-30 seeds:
+
+```powershell
+python -m src.baselines.benchmark --agents 10 15 20 --seeds 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29
+```
+
+Use `--no-external` when you want deterministic graph-native fallback only,
+without attempting the optional `cbs-mapf` grid backend.
+The default CSV uses paper-safe labels for the graph-native baselines:
+`prioritized_planning_default_order` and
+`hungarian_prioritized_planning` plus
+`fifo_nearest_prioritized_planning`. The optional `cbs` / `hungarian_cbs` /
+`fifo_nearest` aliases still exist for adapter smoke experiments, but the
+warehouse benchmark should not call them "CBS" unless rows actually report
+`solver=cbs_mapf`.
+The `priority_search` baseline is multi-order prioritized planning, not full
+PBS constraint-tree search.
+The `opentcs_default_emulator` baseline approximates the default OpenTCS stack
+shape for thesis comparison: dispatcher-style cost-greedy assignment, shortest
+path routing, and queued resource-allocation waits. It deliberately does not
+emulate production deadlock recovery/rerouting, so cyclic waits can time out.
+
+Summarize a raw benchmark CSV into a compact markdown table:
+
+```powershell
+python -m src.baselines.aggregate results/baselines/sprint2_mapf_baselines.csv
+```
+
+For paper tables, include confidence intervals on success rate and all-run
+penalized metrics so failed runs are not hidden:
+
+```powershell
+python -m src.baselines.aggregate results/baselines/sprint2_mapf_baselines.csv --ci bootstrap --bootstrap-samples 10000 --failure-makespan-penalty 512
+```
+
+For the thesis table, `lower_bound_steps` is the MAPF-IS lower bound:
+`max_i single_agent_shortest_path_steps(start_i, goal_i)`. It is admissible,
+but it is not a CBS-optimal makespan. The retained `cbs-mapf` adapter is useful
+for smoke checks, while the warehouse benchmark defaults to graph-native
+prioritized planners for reproducibility on the directed topology.
+
+`priority_search` exits early on the first successful priority order, so wall
+time can vary sharply with agent count and seed. Treat its latency as a
+worst-case-budgeted method rather than assuming monotonic scaling.
+
+Makespan, waiting-time, throughput, and ratio summaries are computed on
+successful runs only. Always present these charts together with success rate;
+otherwise low-success methods can look deceptively fast.
+
 For one-shot MAPF/CBS baselines, pass the planner makespan into the rollout
 logger so the CSV/JSON metrics do not confuse lifelong MAPD completion time
 with one-shot MAPF makespan:
@@ -51,8 +106,9 @@ Commit the core project files:
 - `src/` - parser, routing, PettingZoo env, MAPF adapter, logging, visualization
 - `orca_share_media1778260607027_7458565577098821053.xml` - OpenTCS map sample
 - `results/map/` - curated topology visualization artifacts
-- `requirements.txt`, `PLAN.md`, `README.md`
+- `requirements.txt`, `README.md`
 
 The local `cleanrl/` and `opentcs-integration-example/` folders are ignored as
 third-party checkouts. Keep them as separate upstream repos, forks, or submodules
 if they become part of the final thesis artifact.
+`PLAN.md` and `CLAUDE.md` are ignored local planning notes.
