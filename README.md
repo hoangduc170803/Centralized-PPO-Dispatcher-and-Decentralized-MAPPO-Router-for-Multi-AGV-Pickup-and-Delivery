@@ -111,7 +111,7 @@ masks (`available_actions`). The full upstream repo is vendored under
 
 Tensorboard logs and pinned dependencies install with the base requirements
 (`tensorboardX>=2.6`). No additional pip install is required for the vendored
-package — `src.rl.mappo_onpolicy` puts `on-policy/` on `sys.path` automatically.
+package; `src.rl.mappo_onpolicy` puts `on-policy/` on `sys.path` automatically.
 
 Run a 5-AGV, 200k env-step smoke training on the largest-SCC warehouse map:
 
@@ -123,6 +123,11 @@ python -m src.rl.mappo_onpolicy.train `
     --hidden_size 64 --layer_N 2 `
     --experiment_name sprint3_smoke_5agv --seed 0
 ```
+
+The Sprint 3 defaults use a conservative PPO update budget
+(`ppo_epoch=4`, `num_mini_batch=4`) and higher exploration pressure
+(`entropy_coef=0.03`) after the first 200k-step run showed early entropy
+collapse.
 
 Logs land in `results/sprint3/onpolicy_smoke/<experiment>_seed<seed>/`:
 

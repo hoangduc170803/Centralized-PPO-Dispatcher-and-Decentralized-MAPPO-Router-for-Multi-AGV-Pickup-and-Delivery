@@ -96,6 +96,17 @@ class TestEnvAdapter(unittest.TestCase):
         self.assertIn("tasks_completed_total", info)
         self.assertIn("bad_transition", info)
 
+    def test_step_level_info_mismatch_is_not_silent(self):
+        adapter = _tiny_adapter(num_agents=2)
+
+        with self.assertRaises(AssertionError):
+            adapter._merge_infos(
+                {
+                    "agent_0": {"tasks_pending": 1},
+                    "agent_1": {"tasks_pending": 2},
+                }
+            )
+
 
 class TestActionMaskGate(unittest.TestCase):
     def test_policy_never_samples_masked_actions(self):

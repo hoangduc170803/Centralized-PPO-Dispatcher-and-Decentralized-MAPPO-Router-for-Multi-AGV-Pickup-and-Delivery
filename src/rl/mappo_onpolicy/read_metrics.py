@@ -24,13 +24,6 @@ import numpy as np
 from tensorboardX.proto import event_pb2
 
 
-def _masked_crc32c(data: bytes) -> int:
-    """tf.compat masked-CRC32 used in tfevents framing (we skip validation)."""
-    # The reader does not validate the CRC because we trust local writes.
-    # Returning 0 lets callers skip the check.
-    return 0
-
-
 def _read_tfevents(path: Path) -> Iterator[event_pb2.Event]:
     """Yield decoded protobuf events from a tfevents file."""
     with path.open("rb") as f:

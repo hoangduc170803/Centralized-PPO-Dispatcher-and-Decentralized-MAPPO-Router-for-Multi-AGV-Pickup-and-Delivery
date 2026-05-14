@@ -2,9 +2,8 @@
 
 on-policy runners read ``self.envs.observation_space[0]`` directly and pass
 arrays shaped ``(n_rollout_threads, num_agents, ...)`` into the buffer. The
-simplest backing for Sprint 3 is ``DummyVecEnv`` (single env in-process); a
-``SubprocVecEnv`` skeleton is included for Sprint 4 scale-up but not wired
-this sprint to keep the surface small.
+simplest backing for Sprint 3 is ``DummyVecEnv``. Add a process-backed wrapper
+in Sprint 4 only when env throughput becomes the bottleneck.
 """
 
 from __future__ import annotations
@@ -106,20 +105,3 @@ class DummyVecEnv:
     def seed(self, seeds: Sequence[int]) -> None:
         for env, s in zip(self.envs, seeds):
             env.seed(int(s))
-
-
-class SubprocVecEnv:
-    """Placeholder for the Sprint 4 multi-process vec env.
-
-    On Windows + PettingZoo + networkx, ``multiprocessing`` requires the env
-    factory to be top-level picklable, which the current
-    ``parse_opentcs_map`` + ``AStarRouter(precompute=True)`` chain is, but the
-    safety/speed benefit only matters once env throughput limits training.
-    We keep this scaffold so Sprint 4 can fill it in without changing the
-    runner contract.
-    """
-
-    def __init__(self, env_fns):  # noqa: D401
-        raise NotImplementedError(
-            "SubprocVecEnv is reserved for Sprint 4; use DummyVecEnv for now"
-        )

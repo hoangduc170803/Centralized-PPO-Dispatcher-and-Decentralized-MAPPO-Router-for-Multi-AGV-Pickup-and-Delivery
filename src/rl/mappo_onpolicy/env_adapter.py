@@ -45,6 +45,17 @@ DEFAULT_MAP_FILE = (
     / "orca_share_media1778260607027_7458565577098821053.xml"
 )
 
+STEP_LEVEL_INFO_KEYS = (
+    "validator_interventions",
+    "validator_iterations",
+    "conflicts_vertex",
+    "conflicts_edge_swap",
+    "conflicts_following",
+    "tasks_completed_total",
+    "tasks_pending",
+    "tasks_in_flight",
+)
+
 
 @dataclass
 class WarehouseEnvConfig:
@@ -155,6 +166,44 @@ class WarehouseOnPolicyEnv:
         )
         return per_agent_obs, share, avail
 
+    def _merge_infos(self, infos: dict[str, dict[str, Any]]) -> dict[str, Any]:
+        """Collapse duplicated env-level info while preserving per-agent fields.
+
+        `WarehouseEnv` currently emits the same step-level counters for every
+        agent. Assert that invariant for the known shared keys so a future
+        per-agent metric cannot silently corrupt aggregate logging.
+        """
+        if not infos:
+            return {}
+
+        first_agent = self._agent_order[0]
+        first_info = infos.get(first_agent, next(iter(infos.values())))
+        merged = {
+            key: first_info[key]
+            for key in STEP_LEVEL_INFO_KEYS
+            if key in first_info
+        }
+        for agent, info in infos.items():
+            for key, expected in merged.items():
+                actual = info.get(key)
+                if actual != expected:
+                    raise AssertionError(
+                        f"WarehouseEnv info field {key!r} differs between "
+                        f"{first_agent!r} ({expected!r}) and {agent!r} ({actual!r})"
+                    )
+
+        per_agent_info = {
+            agent: {
+                key: value
+                for key, value in info.items()
+                if key not in STEP_LEVEL_INFO_KEYS
+            }
+            for agent, info in infos.items()
+        }
+        if any(per_agent_info.values()):
+            merged["per_agent_info"] = per_agent_info
+        return merged
+
     def reset(
         self, seed: Optional[int] = None
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -190,12 +239,10 @@ class WarehouseOnPolicyEnv:
             dtype=bool,
         )
 
-        first_info = next(iter(infos.values()), {})
-        merged_info = dict(first_info)
+        merged_info = self._merge_infos(infos)
         merged_info["bad_transition"] = bool(
             all(truncated.values()) and not all(terminated.values())
         )
-        self._latest_infos = merged_info
 
         if self.auto_reset and dones_arr.all():
             # Reset BEFORE returning so the next collect() reads valid obs,
@@ -203,6 +250,7 @@ class WarehouseOnPolicyEnv:
             reset_obs, reset_share, reset_avail = self.reset()
             per_agent_obs, share_obs, avail = reset_obs, reset_share, reset_avail
 
+        self._latest_infos = merged_info
         return per_agent_obs, share_obs, rewards_arr, dones_arr, merged_info, avail
 
     def seed(self, seed: Optional[int]) -> None:

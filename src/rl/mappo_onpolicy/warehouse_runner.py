@@ -304,4 +304,4 @@ class WarehouseRunner(Runner):
             if self.use_wandb and wandb is not None:
                 wandb.log({key: scalar}, step=total_num_steps)
             else:
-                self.writter.add_scalars(key, {key: scalar}, total_num_steps)
+                self.writter.add_scalar(key, scalar, total_num_steps)
