@@ -47,6 +47,12 @@ results/baselines/*
 cleanrl/
 opentcs-integration-example/
 
+# Vendored marlbenchmark/on-policy (kept tracked, only ignore runtime outputs).
+on-policy/runs/
+on-policy/wandb/
+on-policy/**/__pycache__/
+on-policy/**/*.py[cod]
+
 # Java / Gradle / Maven build artifacts
 **/target/
 **/.gradle/
