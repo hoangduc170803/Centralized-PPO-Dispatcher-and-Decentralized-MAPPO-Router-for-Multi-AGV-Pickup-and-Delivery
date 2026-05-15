@@ -147,6 +147,13 @@ python -m src.rl.mappo_onpolicy.train `
     --experiment_name sprint3_5agv_1m --seed 0
 ```
 
+For W8 go/no-go or thesis tables, use at least 20 seeds so the error bars are
+meaningful. The helper script runs repeated seeds with identical settings:
+
+```powershell
+.\scripts\run_sprint3_1m.ps1 -SeedCsv 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19
+```
+
 Logs land in `results/sprint3/onpolicy_smoke/<experiment>_seed<seed>/`:
 
 - `logs/` - tensorboardX scalars per tag (open with `tensorboard --logdir`).

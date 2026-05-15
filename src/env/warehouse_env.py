@@ -283,7 +283,11 @@ class WarehouseEnv(ParallelEnv):
         masks, _, _ = self._action_masks_for_agents(list(self._agent_info))
         return masks[agent]
 
-    def _build_obs(self, agent: str) -> dict:
+    def _build_obs(
+        self,
+        agent: str,
+        action_mask: Optional[np.ndarray] = None,
+    ) -> dict:
         info = self._agent_info[agent]
         goal = info.task.current_goal if info.task is not None else None
         self_x, self_y = self._norm_xy(info.pos)
@@ -308,7 +312,13 @@ class WarehouseEnv(ParallelEnv):
                 knn,
             ]
         )
-        return {"observation": flat, "action_mask": self._action_mask_for(agent)}
+        if action_mask is None:
+            action_mask = self._action_mask_for(agent)
+        return {"observation": flat, "action_mask": action_mask}
+
+    def _build_obs_batch(self) -> dict[str, dict]:
+        masks, _, _ = self._action_masks_for_agents(self.agents)
+        return {a: self._build_obs(a, masks[a]) for a in self.agents}
 
     # ------------------------------------------------------------------ dispatch
 
@@ -382,7 +392,7 @@ class WarehouseEnv(ParallelEnv):
 
         self._greedy_dispatch()
 
-        obs = {a: self._build_obs(a) for a in self.agents}
+        obs = self._build_obs_batch()
         infos = {a: {} for a in self.agents}
         return obs, infos
 
@@ -537,7 +547,7 @@ class WarehouseEnv(ParallelEnv):
         terminated = {a: False for a in self.agents}
         truncated = {a: self._step_idx >= self.episode_horizon for a in self.agents}
 
-        obs = {a: self._build_obs(a) for a in self.agents}
+        obs = self._build_obs_batch()
         infos = {
             a: {
                 "validator_interventions": int(report.n_interventions),

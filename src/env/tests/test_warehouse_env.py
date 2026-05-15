@@ -11,6 +11,7 @@ import sys
 import time
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import networkx as nx
 import numpy as np
@@ -139,6 +140,31 @@ class TestWarehouseEnv(unittest.TestCase):
         for a, agent_obs in obs.items():
             # action_mask must have at least WAIT valid
             self.assertGreaterEqual(int(agent_obs["action_mask"].sum()), 1)
+
+    def test_reset_batches_action_masks_once(self):
+        env = _line_env(lookahead_action_mask=True)
+
+        with patch.object(
+            env,
+            "_action_masks_for_agents",
+            wraps=env._action_masks_for_agents,
+        ) as wrapped:
+            env.reset(seed=0)
+
+        self.assertEqual(wrapped.call_count, 1)
+
+    def test_step_batches_action_masks_for_validation_and_next_obs(self):
+        env = _line_env(lookahead_action_mask=True)
+        env.reset(seed=0)
+
+        with patch.object(
+            env,
+            "_action_masks_for_agents",
+            wraps=env._action_masks_for_agents,
+        ) as wrapped:
+            env.step({agent: WAIT_SLOT for agent in env.agents})
+
+        self.assertEqual(wrapped.call_count, 2)
 
     def test_lookahead_mask_blocks_currently_occupied_node(self):
         env = _line_env(lookahead_action_mask=True)
