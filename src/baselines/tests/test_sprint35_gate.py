@@ -57,6 +57,25 @@ class TestSprint35GateRunner(unittest.TestCase):
         self.assertEqual(rows[0].cbs_solver, "cbs_mapf")
         self.assertEqual(rows[0].pp32_over_cbs, 1.0)
 
+    @unittest.skipUnless(
+        importlib.util.find_spec("cbs_mapf"),
+        "cbs-mapf not installed",
+    )
+    def test_cbs_reference_can_run_outer_jobs_in_parallel(self):
+        rows = run_cbs_reference(
+            seeds=[0, 1],
+            agent_counts=[1],
+            warehouse_probe=False,
+            cbs_jobs=2,
+            max_time=16,
+            cbs_max_iter=20,
+            cbs_low_level_max_iter=50,
+        )
+
+        self.assertEqual(len(rows), 2)
+        self.assertTrue(all(row.cbs_success for row in rows))
+        self.assertEqual([row.seed for row in rows], [0, 1])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

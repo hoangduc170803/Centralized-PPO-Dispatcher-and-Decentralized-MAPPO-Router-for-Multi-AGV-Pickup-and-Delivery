@@ -46,6 +46,8 @@ DEFAULT_SEEDS = tuple(range(10))
 STRESS_DISTRIBUTIONS = ("hotspot", "burst_wave")
 _STRESS_G: nx.DiGraph | None = None
 _STRESS_ROUTER: AStarRouter | None = None
+_CBS_GRID_CACHE: dict[int, tuple[nx.DiGraph, AStarRouter]] = {}
+_CBS_WAREHOUSE_CACHE: tuple[nx.DiGraph, AStarRouter] | None = None
 
 
 @dataclass(frozen=True)
@@ -158,8 +160,22 @@ def run_cbs_reference(
     cbs_max_iter: int = 200,
     cbs_low_level_max_iter: int = 300,
     cbs_max_process: int = 1,
+    cbs_jobs: int = 1,
     max_time: int = 128,
 ) -> list[CBSReferenceRow]:
+    if cbs_jobs > 1:
+        return _run_cbs_reference_parallel(
+            seeds=tuple(seeds),
+            agent_counts=agent_counts,
+            grid_size=grid_size,
+            warehouse_probe=warehouse_probe,
+            cbs_max_iter=cbs_max_iter,
+            cbs_low_level_max_iter=cbs_low_level_max_iter,
+            cbs_max_process=cbs_max_process,
+            max_time=max_time,
+            cbs_jobs=cbs_jobs,
+        )
+
     rows: list[CBSReferenceRow] = []
     version = importlib.metadata.version("cbs-mapf")
     grid_graph = build_cbs_grid(grid_size)
@@ -194,6 +210,161 @@ def run_cbs_reference(
             )
         )
     return rows
+
+
+def _run_cbs_reference_parallel(
+    seeds: Sequence[int],
+    agent_counts: Sequence[int],
+    grid_size: int,
+    warehouse_probe: bool,
+    cbs_max_iter: int,
+    cbs_low_level_max_iter: int,
+    cbs_max_process: int,
+    max_time: int,
+    cbs_jobs: int,
+) -> list[CBSReferenceRow]:
+    version = importlib.metadata.version("cbs-mapf")
+    jobs: list[tuple[str, str, int, int, int, str, int, int, int, int]] = []
+    for num_agents in agent_counts:
+        for seed in seeds:
+            jobs.append(
+                (
+                    "cbs_grid_reference",
+                    "uniform_grid",
+                    grid_size,
+                    num_agents,
+                    seed,
+                    version,
+                    cbs_max_iter,
+                    cbs_low_level_max_iter,
+                    cbs_max_process,
+                    max_time,
+                )
+            )
+            if warehouse_probe:
+                jobs.append(
+                    (
+                        "warehouse_external_cbs_probe",
+                        "uniform_warehouse",
+                        grid_size,
+                        num_agents,
+                        seed,
+                        version,
+                        100,
+                        100,
+                        cbs_max_process,
+                        max_time,
+                    )
+                )
+
+    rows: list[CBSReferenceRow] = []
+    max_workers = max(1, min(cbs_jobs, len(jobs)))
+    with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
+        future_to_job = {
+            executor.submit(_run_cbs_reference_job, job): job
+            for job in jobs
+        }
+        completed = 0
+        total = len(future_to_job)
+        for future in concurrent.futures.as_completed(future_to_job):
+            row = future.result()
+            rows.append(row)
+            completed += 1
+            print(
+                f"[cbs] {completed}/{total} {row.scenario} "
+                f"N={row.num_agents} seed={row.seed} success={row.cbs_success}",
+                flush=True,
+            )
+    rows.sort(key=lambda row: (row.scenario, row.num_agents, row.seed))
+    return rows
+
+
+def _run_cbs_reference_job(
+    job: tuple[str, str, int, int, int, str, int, int, int, int],
+) -> CBSReferenceRow:
+    (
+        scenario,
+        distribution,
+        grid_size,
+        num_agents,
+        seed,
+        version,
+        cbs_max_iter,
+        cbs_low_level_max_iter,
+        cbs_max_process,
+        max_time,
+    ) = job
+    G, router = _cbs_graph_and_router(scenario, grid_size)
+    starts, goals = (
+        sample_grid_instance(G, num_agents, seed)
+        if scenario == "cbs_grid_reference"
+        else _sample_distinct_nodes(G, num_agents, seed)
+    )
+    cbs = CBSMapfPlanner(
+        G,
+        max_time=max_time,
+        max_iter=cbs_max_iter,
+        low_level_max_iter=cbs_low_level_max_iter,
+        max_process=cbs_max_process,
+    ).plan(starts, goals, use_external=True, fallback_on_failure=False)
+    pp32 = PrioritySearchPlanner(G, max_time=max_time, max_orders=32).plan(
+        starts,
+        goals,
+        seed=seed,
+    )
+    default_pp = CBSMapfPlanner(G, max_time=max_time).plan(
+        starts,
+        goals,
+        use_external=False,
+    )
+    hungarian_run = _hungarian_pp(G, starts, goals, router, max_time)
+    hungarian_cbs = CBSMapfPlanner(
+        G,
+        max_time=max_time,
+        max_iter=cbs_max_iter,
+        low_level_max_iter=cbs_low_level_max_iter,
+        max_process=cbs_max_process,
+    ).plan(
+        starts,
+        hungarian_run.goals,
+        use_external=True,
+        fallback_on_failure=False,
+    )
+    return _cbs_reference_row(
+        scenario=scenario,
+        distribution=distribution,
+        seed=seed,
+        num_agents=num_agents,
+        version=version,
+        starts=starts,
+        goals=goals,
+        cbs=cbs,
+        pp32=pp32,
+        default_pp=default_pp,
+        hungarian_cbs=hungarian_cbs,
+        hungarian_pp=hungarian_run.result,
+        lower_bound_steps=_lower_bound_steps(starts, goals, router),
+        pp32_elapsed_s=pp32.elapsed_s,
+        hungarian_goals=hungarian_run.goals,
+    )
+
+
+def _cbs_graph_and_router(
+    scenario: str,
+    grid_size: int,
+) -> tuple[nx.DiGraph, AStarRouter]:
+    global _CBS_WAREHOUSE_CACHE
+    if scenario == "cbs_grid_reference":
+        cached = _CBS_GRID_CACHE.get(grid_size)
+        if cached is None:
+            G = build_cbs_grid(grid_size)
+            cached = (G, AStarRouter(G, precompute=True))
+            _CBS_GRID_CACHE[grid_size] = cached
+        return cached
+    if _CBS_WAREHOUSE_CACHE is None:
+        G = parse_opentcs_map(str(DEFAULT_MAP_FILE), restrict_to_largest_scc=True)
+        _CBS_WAREHOUSE_CACHE = (G, AStarRouter(G, precompute=True))
+    return _CBS_WAREHOUSE_CACHE
 
 
 def _run_cbs_reference_on_graph(
@@ -714,6 +885,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--stress-seeds", type=int, nargs="+", default=None)
     parser.add_argument("--stress-baselines", nargs="+", default=list(DEFAULT_BASELINES))
     parser.add_argument("--cbs-max-process", type=int, default=1)
+    parser.add_argument("--cbs-jobs", type=int, default=1)
     parser.add_argument("--cbs-max-iter", type=int, default=200)
     parser.add_argument("--cbs-low-level-max-iter", type=int, default=300)
     parser.add_argument("--jobs", type=int, default=1)
@@ -731,6 +903,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             cbs_max_iter=args.cbs_max_iter,
             cbs_low_level_max_iter=args.cbs_low_level_max_iter,
             cbs_max_process=args.cbs_max_process,
+            cbs_jobs=args.cbs_jobs,
         )
     cbs_csv = write_cbs_reference_csv(
         cbs_rows,
