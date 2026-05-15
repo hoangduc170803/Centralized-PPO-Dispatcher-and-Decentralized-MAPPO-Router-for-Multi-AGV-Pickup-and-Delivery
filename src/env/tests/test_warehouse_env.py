@@ -157,6 +157,9 @@ class TestWarehouseEnv(unittest.TestCase):
 
         self.assertEqual(int(mask[slot_into_occupied]), 0)
         self.assertEqual(int(mask[WAIT_SLOT]), 1)
+        _, _, _, _, infos = env.step({a0: WAIT_SLOT, a1: WAIT_SLOT})
+        self.assertEqual(infos[a0]["lookahead_forced_wait_agents"], 1)
+        self.assertAlmostEqual(infos[a0]["lookahead_forced_wait_rate"], 0.5)
 
     def test_lookahead_mask_blocks_predicted_next_node(self):
         env = _line_env(lookahead_action_mask=True)
@@ -200,6 +203,9 @@ class TestWarehouseEnv(unittest.TestCase):
         mask = env._build_obs(a0)["action_mask"]
 
         self.assertEqual(int(mask[slot_into_occupied]), 1)
+        _, _, _, _, infos = env.step({a0: WAIT_SLOT, a1: WAIT_SLOT})
+        self.assertEqual(infos[a0]["lookahead_forced_wait_agents"], 0)
+        self.assertAlmostEqual(infos[a0]["lookahead_forced_wait_rate"], 0.0)
 
     def test_steps_per_second_throughput(self):
         env = _make_env(num_agents=5, horizon=512, seed=4)

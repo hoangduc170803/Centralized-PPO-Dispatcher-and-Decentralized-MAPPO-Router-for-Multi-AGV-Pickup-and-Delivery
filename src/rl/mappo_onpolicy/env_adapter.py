@@ -54,6 +54,8 @@ STEP_LEVEL_INFO_KEYS = (
     "tasks_completed_total",
     "tasks_pending",
     "tasks_in_flight",
+    "lookahead_forced_wait_agents",
+    "lookahead_forced_wait_rate",
 )
 
 
@@ -242,6 +244,9 @@ class WarehouseOnPolicyEnv:
         )
 
         merged_info = self._merge_infos(infos)
+        # WarehouseEnv is lifelong: horizon truncation is a rollout boundary,
+        # not task completion. The flag is kept for on-policy compatibility
+        # and only affects returns when --use_proper_time_limits is enabled.
         merged_info["bad_transition"] = bool(
             all(truncated.values()) and not all(terminated.values())
         )

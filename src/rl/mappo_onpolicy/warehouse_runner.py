@@ -13,7 +13,9 @@ masks broadcast from the per-agent ``dones`` array.
 Logged metrics every ``log_interval`` episodes include the standard PPO
 losses plus warehouse-specific aggregates collected from `info`:
 ``tasks_completed_per_step``, ``validator_intervention_rate``, and per-step
-conflict counts (vertex / edge_swap / following).
+conflict counts (vertex / edge_swap / following), plus
+``lookahead_forced_wait_rate`` to catch over-conservative masks at high AGV
+density.
 """
 
 from __future__ import annotations
@@ -47,6 +49,7 @@ class WarehouseRunner(Runner):
         self._step_conflicts_vertex = 0
         self._step_conflicts_edge_swap = 0
         self._step_conflicts_following = 0
+        self._step_lookahead_forced_wait_rate = 0.0
         self._steps_logged = 0
 
     # ------------------------------------------------------------ rollout
@@ -256,6 +259,9 @@ class WarehouseRunner(Runner):
             self._step_conflicts_vertex += int(info.get("conflicts_vertex", 0))
             self._step_conflicts_edge_swap += int(info.get("conflicts_edge_swap", 0))
             self._step_conflicts_following += int(info.get("conflicts_following", 0))
+            self._step_lookahead_forced_wait_rate += float(
+                info.get("lookahead_forced_wait_rate", 0.0)
+            )
             self._steps_logged += 1
 
     def _reset_step_stats(self) -> None:
@@ -263,6 +269,7 @@ class WarehouseRunner(Runner):
         self._step_conflicts_vertex = 0
         self._step_conflicts_edge_swap = 0
         self._step_conflicts_following = 0
+        self._step_lookahead_forced_wait_rate = 0.0
         self._steps_logged = 0
 
     def _log_warehouse_metrics(
@@ -287,6 +294,9 @@ class WarehouseRunner(Runner):
         )
         train_infos["warehouse/conflicts_following_per_step"] = (
             self._step_conflicts_following / steps
+        )
+        train_infos["warehouse/lookahead_forced_wait_rate"] = (
+            self._step_lookahead_forced_wait_rate / steps
         )
         train_infos["warehouse/tasks_pending"] = float(
             latest_info.get("tasks_pending", 0)

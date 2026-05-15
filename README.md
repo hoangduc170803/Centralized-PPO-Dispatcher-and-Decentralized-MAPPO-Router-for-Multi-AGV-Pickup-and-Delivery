@@ -132,6 +132,8 @@ Action masks also include a conservative one-step look-ahead by default:
 graph-invalid moves are masked, and so are moves into currently occupied nodes,
 nodes another AGV is predicted to occupy next, or reverse traversal of a
 predicted edge. Use `--disable_lookahead_action_mask` only for ablations.
+At higher density, watch `warehouse/lookahead_forced_wait_rate`; a rising value
+means the mask is over-constraining agents into WAIT and may need a yield policy.
 
 Treat 200k env steps as a smoke run. For thesis-grade 5-AGV learning curves,
 budget at least 1-5M env steps and compare multiple seeds:
@@ -161,7 +163,7 @@ python -m src.rl.mappo_onpolicy.read_metrics `
 Key tags include `average_step_rewards`, `dist_entropy`, `value_loss`,
 `policy_loss`, `ratio`, plus warehouse-specific aggregates under
 `warehouse/tasks_completed_total`, `warehouse/validator_intervention_rate`,
-and per-step conflict counters.
+`warehouse/lookahead_forced_wait_rate`, and per-step conflict counters.
 
 ## Repository Layout
 

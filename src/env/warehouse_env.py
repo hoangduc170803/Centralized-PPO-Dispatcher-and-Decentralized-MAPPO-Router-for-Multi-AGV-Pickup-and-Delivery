@@ -194,7 +194,11 @@ class WarehouseEnv(ParallelEnv):
             out[3 * i : 3 * i + 3] = feat
         return out
 
-    def _predicted_next_node(self, agent: str) -> str:
+    def _predicted_next_node(
+        self,
+        agent: str,
+        slot_to_nbr: Optional[dict[int, str]] = None,
+    ) -> str:
         """Best-effort one-step route prediction for dynamic action masking."""
         info = self._agent_info[agent]
         goal = info.task.current_goal if info.task is not None else None
@@ -203,10 +207,14 @@ class WarehouseEnv(ParallelEnv):
         next_hop = self.router.next_hop(info.pos, goal)
         if next_hop is None:
             return info.pos
-        _, slot_to_nbr = self.compass.get(info.pos)
+        if slot_to_nbr is None:
+            _, slot_to_nbr = self.compass.get(info.pos)
         return next_hop if next_hop in slot_to_nbr.values() else info.pos
 
-    def _action_mask_for(self, agent: str) -> np.ndarray:
+    def _action_masks_for_agents(
+        self,
+        agents: list[str],
+    ) -> tuple[dict[str, np.ndarray], dict[str, dict[int, str]], dict[str, float]]:
         """Return graph-valid actions minus obvious one-step conflicts.
 
         The post-policy validator remains the safety authority. This mask is a
@@ -214,31 +222,66 @@ class WarehouseEnv(ParallelEnv):
         another agent is predicted to occupy next, and reverse traversal of an
         edge another agent is predicted to use. WAIT is always kept valid.
         """
-        info = self._agent_info[agent]
-        mask, slot_to_nbr = self.compass.get(info.pos)
-        mask = mask.copy()
-        if not self.lookahead_action_mask or len(self._agent_info) <= 1:
-            return mask
+        compass_data = {
+            agent: self.compass.get(self._agent_info[agent].pos)
+            for agent in agents
+        }
+        masks = {
+            agent: compass_data[agent][0].copy()
+            for agent in agents
+        }
+        slot_maps = {
+            agent: compass_data[agent][1]
+            for agent in agents
+        }
+        report = {
+            "lookahead_forced_wait_agents": 0.0,
+            "lookahead_forced_wait_rate": 0.0,
+        }
+        if not self.lookahead_action_mask or len(agents) <= 1:
+            return masks, slot_maps, report
 
-        reserved_nodes: set[str] = set()
-        reserved_edges: set[tuple[str, str]] = set()
-        for other, other_info in self._agent_info.items():
-            if other == agent:
-                continue
-            other_next = self._predicted_next_node(other)
-            reserved_nodes.add(other_info.pos)
-            reserved_nodes.add(other_next)
-            if other_next != other_info.pos:
-                reserved_edges.add((other_info.pos, other_next))
+        predicted_next = {
+            agent: self._predicted_next_node(agent, slot_maps[agent])
+            for agent in agents
+        }
 
-        my_pos = info.pos
-        for slot, next_node in slot_to_nbr.items():
-            if slot == WAIT_SLOT:
-                continue
-            if next_node in reserved_nodes or (next_node, my_pos) in reserved_edges:
-                mask[slot] = 0
-        mask[WAIT_SLOT] = 1
-        return mask
+        forced_wait_agents = 0
+        for agent in agents:
+            info = self._agent_info[agent]
+            mask = masks[agent]
+            graph_had_move = bool(mask.sum() > 1)
+            reserved_nodes: set[str] = set()
+            reserved_edges: set[tuple[str, str]] = set()
+            for other in agents:
+                if other == agent:
+                    continue
+                other_info = self._agent_info[other]
+                other_next = predicted_next[other]
+                reserved_nodes.add(other_info.pos)
+                reserved_nodes.add(other_next)
+                if other_next != other_info.pos:
+                    reserved_edges.add((other_info.pos, other_next))
+
+            my_pos = info.pos
+            for slot, next_node in slot_maps[agent].items():
+                if slot == WAIT_SLOT:
+                    continue
+                if next_node in reserved_nodes or (next_node, my_pos) in reserved_edges:
+                    mask[slot] = 0
+            mask[WAIT_SLOT] = 1
+            if graph_had_move and int(mask.sum()) == 1:
+                forced_wait_agents += 1
+
+        report["lookahead_forced_wait_agents"] = float(forced_wait_agents)
+        report["lookahead_forced_wait_rate"] = (
+            forced_wait_agents / max(len(agents), 1)
+        )
+        return masks, slot_maps, report
+
+    def _action_mask_for(self, agent: str) -> np.ndarray:
+        masks, _, _ = self._action_masks_for_agents(list(self._agent_info))
+        return masks[agent]
 
     def _build_obs(self, agent: str) -> dict:
         info = self._agent_info[agent]
@@ -346,8 +389,11 @@ class WarehouseEnv(ParallelEnv):
     def step(self, actions: dict[str, int]):
         self._step_idx += 1
         positions = [self._agent_info[a].pos for a in self.agents]
-        slot_maps = [self.compass.get(p)[1] for p in positions]
-        masks = [self._action_mask_for(a) for a in self.agents]
+        mask_by_agent, slot_map_by_agent, lookahead_report = (
+            self._action_masks_for_agents(self.agents)
+        )
+        masks = [mask_by_agent[a] for a in self.agents]
+        slot_maps = [slot_map_by_agent[a] for a in self.agents]
 
         # Capture raw action signals before validator. Defensive against
         # out-of-range actions (e.g., a buggy wrapper or random debug code
@@ -502,6 +548,12 @@ class WarehouseEnv(ParallelEnv):
                 "tasks_completed_total": self._task_gen.num_completed(),
                 "tasks_pending": self._task_gen.num_pending(),
                 "tasks_in_flight": self._task_gen.num_in_flight(),
+                "lookahead_forced_wait_agents": int(
+                    lookahead_report["lookahead_forced_wait_agents"]
+                ),
+                "lookahead_forced_wait_rate": float(
+                    lookahead_report["lookahead_forced_wait_rate"]
+                ),
             }
             for a in self.agents
         }
