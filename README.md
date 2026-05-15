@@ -99,9 +99,9 @@ metrics = logger.finalize(instance_makespan=plan_result.makespan)
 `last_completion_step` is for streamed MAPD episodes. `instance_makespan` is for
 one-shot MAPF instances.
 
-## Sprint 3 MAPPO Training (marlbenchmark/on-policy backend)
+## MAPPO Training (marlbenchmark/on-policy backend)
 
-The Sprint 3 MAPPO Router stack is built on the official MAPPO implementation
+MAPPO Router stack is built on the official MAPPO implementation
 ([marlbenchmark/on-policy](https://github.com/marlbenchmark/on-policy)), which
 ships PopArt / ValueNorm value normalization, per-agent advantage with a
 centralized critic, mini-batch SGD, KL-aware PPO updates, and built-in action
@@ -124,7 +124,7 @@ python -m src.rl.mappo_onpolicy.train `
     --experiment_name sprint3_smoke_5agv --seed 0
 ```
 
-The Sprint 3 defaults use a conservative PPO update budget
+Defaults use a conservative PPO update budget
 (`ppo_epoch=4`, `num_mini_batch=4`) and higher exploration pressure
 (`entropy_coef=0.03`) after the first 200k-step run showed early entropy
 collapse.
@@ -147,8 +147,7 @@ python -m src.rl.mappo_onpolicy.train `
     --experiment_name sprint3_5agv_1m --seed 0
 ```
 
-For W8 go/no-go or thesis tables, use at least 20 seeds so the error bars are
-meaningful. The helper script runs repeated seeds with identical settings:
+
 
 ```powershell
 .\scripts\run_sprint3_1m.ps1 -SeedCsv 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19
